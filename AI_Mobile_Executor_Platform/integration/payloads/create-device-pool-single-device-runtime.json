@@ -1,0 +1,9 @@
+{
+  "name": "pixel6-single-device",
+  "description": "Run-first validation pool for the connected Pixel 6",
+  "hostGroup": "default",
+  "deviceIds": ["492b48579dd8e614"],
+  "requiredTags": [],
+  "excludedTags": [],
+  "createdBy": "codex"
+}

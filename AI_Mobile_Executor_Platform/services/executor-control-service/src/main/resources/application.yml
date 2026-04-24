@@ -1,0 +1,73 @@
+server:
+  address: ${SERVER_ADDRESS:0.0.0.0}
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: executor-control-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/executor_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+platform:
+  control:
+    config-version: cfg-v1
+    schedule-version: sched-v1
+    lease-ms: 60000
+    ai:
+      base-url: ${PLATFORM_CONTROL_AI_BASE_URL:http://localhost:8081}
+      connect-timeout-ms: ${PLATFORM_CONTROL_AI_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${PLATFORM_CONTROL_AI_READ_TIMEOUT_MS:60000}
+    console:
+      allowed-origins:
+        - http://127.0.0.1:5173
+        - http://localhost:5173
+    auth:
+      allowed-timestamp-skew-seconds: 300
+      nonce-ttl-seconds: 600
+      nonce-key-prefix: "executor:nonce:"
+      allow-unsigned-devices: ${PLATFORM_CONTROL_ALLOW_UNSIGNED_DEVICES:false}
+      device-tokens: {}
+    admin:
+      auth-token: ${PLATFORM_CONTROL_ADMIN_AUTH_TOKEN:}
+    default-run-config:
+      loop-count: 1
+      budget-ms: 60000
+      loop-interval-ms: 0
+      network-isolation-enabled: false
+      poll-interval-ms: 15000
+      heartbeat-interval-ms: 30000
+      idle-poll-interval-ms: ${PLATFORM_CONTROL_IDLE_POLL_INTERVAL_MS:30000}
+      idle-heartbeat-interval-ms: ${PLATFORM_CONTROL_IDLE_HEARTBEAT_INTERVAL_MS:60000}
+      quiesced-heartbeat-interval-ms: ${PLATFORM_CONTROL_QUIESCED_HEARTBEAT_INTERVAL_MS:60000}
+    artifacts:
+      backend: ${PLATFORM_CONTROL_ARTIFACTS_BACKEND:disabled}
+      upload-ticket-ttl-ms: ${PLATFORM_CONTROL_ARTIFACTS_UPLOAD_TICKET_TTL_MS:300000}
+      cleanup-interval-ms: ${PLATFORM_CONTROL_ARTIFACTS_CLEANUP_INTERVAL_MS:60000}
+      minio:
+        endpoint: ${MINIO_ENDPOINT:}
+        access-key: ${MINIO_ACCESS_KEY:}
+        secret-key: ${MINIO_SECRET_KEY:}
+        bucket: ${MINIO_BUCKET_EXECUTOR_ARTIFACTS:}
+    jobs:
+      lease-reaper-interval-ms: 5000
+      offline-reconciler-interval-ms: 10000
+      command-expiry-interval-ms: 10000
+      run-maintenance-interval-ms: 10000
+      offline-threshold-ms: 90000

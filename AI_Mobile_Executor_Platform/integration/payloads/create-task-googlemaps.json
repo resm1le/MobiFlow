@@ -1,0 +1,30 @@
+{
+  "taskType": "demo.navigate",
+  "profilePackage": "com.google.android.apps.maps",
+  "taskPayload": {
+    "note": "integration-main-path",
+    "destination": "IKEA"
+  },
+  "runConfig": {
+    "loopCount": 1,
+    "budgetMs": 180000,
+    "loopIntervalMs": 0,
+    "networkIsolationEnabled": false,
+    "pollIntervalMs": 15000,
+    "heartbeatIntervalMs": 30000
+  },
+  "artifactPolicy": {
+    "uploadLog": true,
+    "uploadScreenshot": true,
+    "uploadDump": true
+  },
+  "priority": 100,
+  "labels": [
+    "demo",
+    "integration",
+    "googlemaps"
+  ],
+  "source": "manual",
+  "createdBy": "codex",
+  "idempotencyKey": "integration-googlemaps-template"
+}

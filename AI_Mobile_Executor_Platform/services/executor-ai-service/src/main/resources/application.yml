@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: executor-ai-service
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+executor:
+  ai:
+    provider:
+      mode: stub
+      open-ai-compatible:
+        base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+        api-key: ${OPENAI_API_KEY:}
+        model: ${OPENAI_MODEL:gpt-5.4}
+        timeout: ${OPENAI_TIMEOUT:30s}
+        max-concurrent: ${OPENAI_MAX_CONCURRENT:4}
+        failure-threshold: ${OPENAI_FAILURE_THRESHOLD:3}
+        cooldown: ${OPENAI_COOLDOWN:30s}
+        retry429-max-attempts: ${OPENAI_RETRY_429_MAX_ATTEMPTS:2}
+        retry429-backoff: ${OPENAI_RETRY_429_BACKOFF:1s}

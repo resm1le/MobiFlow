@@ -1,0 +1,30 @@
+{
+  "name": "phase2-real-device-run",
+  "description": "Run-first TikTok validation on the connected Pixel 6",
+  "devicePoolId": "pool-replace-me",
+  "taskType": "PLUGIN_RUN",
+  "profilePackage": "com.zhiliaoapp.musically",
+  "taskPayload": {
+    "goal": "Launch TikTok and browse the recommendation feed for one validation loop",
+    "note": "phase2-real-device-validation"
+  },
+  "runConfig": {
+    "loopCount": 1,
+    "budgetMs": 180000,
+    "loopIntervalMs": 0,
+    "networkIsolationEnabled": false,
+    "pollIntervalMs": 15000,
+    "heartbeatIntervalMs": 30000
+  },
+  "artifactPolicy": {
+    "uploadLog": true,
+    "uploadScreenshot": true,
+    "uploadDump": true
+  },
+  "priority": 100,
+  "labels": ["phase2", "integration", "tiktok"],
+  "source": "manual",
+  "createdBy": "codex",
+  "maxRetriesPerDevice": 0,
+  "queueTimeoutMs": 300000
+}

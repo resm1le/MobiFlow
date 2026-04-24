@@ -1,0 +1,10 @@
+platform:
+  control:
+    artifacts:
+      backend: disabled
+      upload-ticket-ttl-ms: 300000
+      cleanup-interval-ms: 60000000
+    jobs:
+      lease-reaper-interval-ms: 60000000
+      offline-reconciler-interval-ms: 60000000
+      command-expiry-interval-ms: 60000000

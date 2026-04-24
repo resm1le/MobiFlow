@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.0.38
+    container_name: executor-control-mysql-local
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: executor_platform
+    ports:
+      - "13306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - executor-control-mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: executor-control-redis-local
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: executor-control-minio-local
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - executor-control-minio-data:/data
+
+volumes:
+  executor-control-mysql-data:
+  executor-control-minio-data:

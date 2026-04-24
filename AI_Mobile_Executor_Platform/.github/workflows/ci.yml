@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repository governance
+        shell: pwsh
+        run: ./integration/scripts/check-repository-governance.ps1
+
+  backend:
+    needs: governance
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - services/executor-control-service
+          - services/executor-ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Test ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: mvn test
+
+  console:
+    needs: governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/executor-console-web/package-lock.json
+      - name: Install
+        working-directory: apps/executor-console-web
+        run: npm ci
+      - name: Test
+        working-directory: apps/executor-console-web
+        run: npm run test
+      - name: Build
+        working-directory: apps/executor-console-web
+        run: npm run build

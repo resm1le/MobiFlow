@@ -1,0 +1,30 @@
+{
+  "name": "phase2-real-device-run",
+  "description": "Run-first validation on the connected Pixel 6",
+  "devicePoolId": "pool-replace-me",
+  "taskType": "demo.navigate",
+  "profilePackage": "com.google.android.apps.maps",
+  "taskPayload": {
+    "note": "phase2-real-device-validation",
+    "destination": "IKEA"
+  },
+  "runConfig": {
+    "loopCount": 1,
+    "budgetMs": 180000,
+    "loopIntervalMs": 0,
+    "networkIsolationEnabled": false,
+    "pollIntervalMs": 15000,
+    "heartbeatIntervalMs": 30000
+  },
+  "artifactPolicy": {
+    "uploadLog": true,
+    "uploadScreenshot": true,
+    "uploadDump": true
+  },
+  "priority": 100,
+  "labels": ["phase2", "integration", "googlemaps"],
+  "source": "manual",
+  "createdBy": "codex",
+  "maxRetriesPerDevice": 0,
+  "queueTimeoutMs": 300000
+}

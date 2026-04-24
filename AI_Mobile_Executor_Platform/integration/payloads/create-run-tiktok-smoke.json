@@ -1,0 +1,30 @@
+{
+  "name": "executor-smoke-run",
+  "description": "Short TikTok smoke validation on the connected Pixel 6",
+  "devicePoolId": "pool-replace-me",
+  "taskType": "PLUGIN_RUN",
+  "profilePackage": "com.zhiliaoapp.musically",
+  "taskPayload": {
+    "goal": "Launch TikTok and validate one short recommendation-feed execution loop",
+    "note": "executor-smoke-validation"
+  },
+  "runConfig": {
+    "loopCount": 1,
+    "budgetMs": 45000,
+    "loopIntervalMs": 0,
+    "networkIsolationEnabled": false,
+    "pollIntervalMs": 15000,
+    "heartbeatIntervalMs": 30000
+  },
+  "artifactPolicy": {
+    "uploadLog": true,
+    "uploadScreenshot": true,
+    "uploadDump": true
+  },
+  "priority": 100,
+  "labels": ["executor", "integration", "smoke", "tiktok"],
+  "source": "manual",
+  "createdBy": "codex",
+  "maxRetriesPerDevice": 0,
+  "queueTimeoutMs": 90000
+}

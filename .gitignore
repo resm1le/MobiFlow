@@ -1,0 +1,37 @@
+.pytest-tmp/
+archive/
+
+# Python
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+**/*.pyo
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Java / Kotlin
+**/target/
+**/build/
+**/.gradle/
+**/.idea/
+**/*.class
+
+# Node / frontend
+**/node_modules/
+**/.next/
+**/dist/
+
+# OS / editors
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+
+# Local env / temp data
+**/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite3
+
+# Intermediate agent development docs
+MobiFlow_Agent/docs/phase-*.md
+MobiFlow_Agent/docs/langgraph-task-runtime.md

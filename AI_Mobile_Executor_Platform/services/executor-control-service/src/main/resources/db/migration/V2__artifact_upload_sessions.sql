@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS artifact_upload_sessions (
+    artifact_id varchar(64) NOT NULL,
+    attempt_id varchar(64) NOT NULL,
+    task_id varchar(64) NOT NULL,
+    device_id varchar(128) NOT NULL,
+    run_id varchar(64) NOT NULL,
+    artifact_type varchar(32) NOT NULL,
+    file_name varchar(255) NOT NULL,
+    mime_type varchar(128) NOT NULL,
+    declared_size_bytes bigint NOT NULL,
+    object_key varchar(512) NOT NULL,
+    status varchar(32) NOT NULL,
+    upload_expires_at bigint NOT NULL,
+    finalized_at bigint DEFAULT NULL,
+    created_at bigint NOT NULL,
+    updated_at bigint NOT NULL,
+    PRIMARY KEY (artifact_id),
+    KEY idx_artifact_upload_sessions_attempt (attempt_id),
+    KEY idx_artifact_upload_sessions_status_expire (status, upload_expires_at)
+);

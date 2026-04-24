@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">AutoA11y Executor</string>
+    <string name="backend_url_hint">Backend URL</string>
+    <string name="device_token_hint">Device Token</string>
+    <string name="save_backend">Save Backend</string>
+    <string name="health_check">Health Check</string>
+    <string name="start_executor">Start Executor</string>
+    <string name="stop_executor">Stop Executor</string>
+    <string name="fake_maps">Fake Task - Google Maps</string>
+    <string name="fake_tiktok">Fake Task - TikTok</string>
+    <string name="fake_shein">Fake Task - SHEIN</string>
+    <string name="refresh_status">Refresh Status</string>
+</resources>
