@@ -7,6 +7,7 @@ from mobiflow_agent.common.contracts import (
     EvidenceKind,
     EvidenceRef,
     ExecutionProposal,
+    MobileObservationSummary,
     ObservationFact,
     ObservationFactSource,
     ObservationInference,
@@ -40,6 +41,7 @@ from mobiflow_agent.runtime.state import CallerContext
 SIMULATED_SCREEN_FACT_ID = "simulated_screen_snapshot"
 SIMULATED_UI_TREE_FACT_ID = "simulated_ui_tree"
 SIMULATED_ACTION_TRACE_FACT_ID = "simulated_latest_action_trace"
+MOBILE_OBSERVATION_SUMMARY_FACT_ID = "mobile_observation_summary"
 
 SUPPORTED_SIMULATED_ACTIONS = {
     "mobile.launch",
@@ -109,7 +111,15 @@ class SimulatedMobilePlatformAdapter(PlatformAdapter):
         screen_snapshot["metadata"] = {
             key: value for key, value in screen.metadata.items() if key != "auto_advance_to_after_observe"
         }
+        summary = self._mobile_summary(screen)
         facts = [
+            ObservationFact(
+                fact_id=MOBILE_OBSERVATION_SUMMARY_FACT_ID,
+                source=ObservationFactSource.PLATFORM,
+                title="Mobile observation summary",
+                value=summary.model_dump(mode="python"),
+                evidence_refs=[snapshot_ref],
+            ),
             ObservationFact(
                 fact_id=SIMULATED_SCREEN_FACT_ID,
                 source=ObservationFactSource.PLATFORM,
@@ -365,6 +375,20 @@ class SimulatedMobilePlatformAdapter(PlatformAdapter):
     def _screen(self) -> SimulatedScreen:
         return self._scenario.screens[self._current_screen_id]
 
+    @staticmethod
+    def _mobile_summary(screen: SimulatedScreen) -> MobileObservationSummary:
+        visible_node_ids = [node.node_id for node in screen.nodes if node.visible]
+        loading_state = bool(screen.metadata.get("loading_state")) or "loading" in f"{screen.screen_id} {screen.title}".casefold()
+        error_state = screen.metadata.get("error_state")
+        return MobileObservationSummary(
+            screen_id=screen.screen_id,
+            screen_title=screen.title,
+            visible_node_ids=visible_node_ids,
+            blocked_state=screen.blocked_reason or screen.metadata.get("step_policy_blocked_reason"),
+            loading_state=loading_state,
+            error_state=error_state if isinstance(error_state, str) else None,
+        )
+
     def _record_trace(
         self,
         *,
@@ -445,6 +469,7 @@ class SimulatedMobilePlatformAdapter(PlatformAdapter):
 
 __all__ = [
     "SIMULATED_ACTION_TRACE_FACT_ID",
+    "MOBILE_OBSERVATION_SUMMARY_FACT_ID",
     "SIMULATED_SCREEN_FACT_ID",
     "SIMULATED_UI_TREE_FACT_ID",
     "SUPPORTED_SIMULATED_ACTIONS",

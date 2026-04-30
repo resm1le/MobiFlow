@@ -134,6 +134,15 @@ class ObservationView(StrictModel):
         return self
 
 
+class MobileObservationSummary(StrictModel):
+    screen_id: str | None = None
+    screen_title: str | None = None
+    visible_node_ids: list[str] = Field(default_factory=list)
+    blocked_state: str | None = None
+    loading_state: bool = False
+    error_state: str | None = None
+
+
 class ExecutionProposal(StrictModel):
     proposal_id: str = Field(min_length=1)
     action_tool_name: str = Field(min_length=1)
@@ -193,6 +202,21 @@ class VerificationSpec(StrictModel):
         return self
 
 
+class VerificationDiagnostics(StrictModel):
+    suspected_current_state: str | None = None
+    matched_check_ids: list[str] = Field(default_factory=list)
+    unmatched_check_ids: list[str] = Field(default_factory=list)
+    blocked_reason: str | None = None
+    missing_evidence: bool = False
+    suggested_recovery_direction: str | None = None
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+
 class VerificationVerdict(StrictModel):
     verdict_id: str = Field(min_length=1)
     status: VerificationStatus
@@ -203,7 +227,7 @@ class VerificationVerdict(StrictModel):
     unmatched_check_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     blocked_reason: str | None = None
-    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: VerificationDiagnostics = Field(default_factory=VerificationDiagnostics)
 
     @model_validator(mode="after")
     def validate_verdict(self) -> "VerificationVerdict":
@@ -221,6 +245,7 @@ __all__ = [
     "EvidenceKind",
     "EvidenceRef",
     "ExecutionProposal",
+    "MobileObservationSummary",
     "ObservationFact",
     "ObservationFactSource",
     "ObservationInference",
@@ -230,6 +255,7 @@ __all__ = [
     "TaskConstraint",
     "TaskContract",
     "VerificationCheck",
+    "VerificationDiagnostics",
     "VerificationPredicate",
     "VerificationPredicateOperator",
     "VerificationSpec",

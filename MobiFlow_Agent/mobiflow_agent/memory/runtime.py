@@ -12,6 +12,7 @@ from mobiflow_agent.memory.models import (
     TaskMemoryQuery,
     TaskMemoryRecord,
     TaskMemoryRecordKind,
+    TaskMemoryRecordStatus,
     TaskMemoryWritebackRequest,
     TaskMemoryWritebackResult,
 )
@@ -484,6 +485,8 @@ class TaskMemoryRuntime:
             "score": round(match.score, 4),
             "confidence_score": round(match.record.confidence_score, 4),
             "tags": match.record.tags,
+            "governance_tags": match.record.governance_tags,
+            "risk_reason": self._risk_reason(match.record),
             "blocked_reason": match.record.blocked_reason,
             "evidence_ref_ids": match.record.evidence_ref_ids[:5],
             "matched_terms": list(match.matched_terms),
@@ -515,6 +518,15 @@ class TaskMemoryRuntime:
                 else:
                     failure_count += 1
                     confidence_score = max(0.0, record.confidence_score - 0.15)
+                feedback_risk_reason = None
+                governance_tags = list(record.governance_tags)
+                status = record.status
+                if failure_count >= self._policy.risky_feedback_failure_threshold:
+                    feedback_risk_reason = "negative_feedback_threshold"
+                    governance_tags = self._normalized_tags([*governance_tags, "risky_feedback"])
+                if failure_count >= self._policy.quarantine_feedback_failure_threshold:
+                    status = TaskMemoryRecordStatus.QUARANTINED
+                    governance_tags = self._normalized_tags([*governance_tags, "risky_feedback", "quarantined_feedback"])
                 feedback.update(
                     {
                         "success_count": success_count,
@@ -523,10 +535,14 @@ class TaskMemoryRuntime:
                         "last_outcome": session.last_verdict.status.value,
                     }
                 )
+                if feedback_risk_reason is not None:
+                    feedback["risk_reason"] = feedback_risk_reason
                 updated = record.model_copy(
                     update={
                         "feedback": feedback,
                         "confidence_score": confidence_score,
+                        "governance_tags": governance_tags,
+                        "status": status,
                         "updated_at_ms": build_memory_timestamp_ms(),
                     }
                 )
@@ -583,6 +599,19 @@ class TaskMemoryRuntime:
             if applicability.get(key):
                 tags.append(str(applicability[key]))
         return TaskMemoryRuntime._normalized_tags(tags)
+
+    @staticmethod
+    def _risk_reason(record: TaskMemoryRecord) -> str | None:
+        feedback = record.feedback if isinstance(record.feedback, dict) else {}
+        risk_reason = feedback.get("risk_reason")
+        if isinstance(risk_reason, str) and risk_reason:
+            return risk_reason
+        failures = int(feedback.get("failure_count", 0) or 0)
+        if failures >= 2:
+            return "negative_feedback_threshold"
+        if "risky_feedback" in {tag.casefold() for tag in record.governance_tags}:
+            return "risky_feedback"
+        return None
 
     @staticmethod
     def _record_tags(session: TaskSession) -> list[str]:
@@ -649,6 +678,13 @@ class TaskMemoryRuntime:
         if observation is None:
             return {}
         for fact in observation.facts:
+            if fact.fact_id == "mobile_observation_summary" and isinstance(fact.value, dict):
+                return {
+                    "screen_id": fact.value.get("screen_id"),
+                    "title": fact.value.get("screen_title"),
+                    "blocked_reason": fact.value.get("blocked_state"),
+                }
+        for fact in observation.facts:
             if fact.fact_id == "simulated_screen_snapshot" and isinstance(fact.value, dict):
                 return fact.value
         return {}
@@ -658,6 +694,10 @@ class TaskMemoryRuntime:
         observation = session.last_observation
         if observation is None:
             return []
+        for fact in observation.facts:
+            if fact.fact_id == "mobile_observation_summary" and isinstance(fact.value, dict):
+                value = fact.value.get("visible_node_ids")
+                return [str(node_id) for node_id in value[:20]] if isinstance(value, list) else []
         for fact in observation.facts:
             if fact.fact_id == "simulated_ui_tree" and isinstance(fact.value, list):
                 return [

@@ -8,6 +8,7 @@ from mobiflow_agent.common.contracts import (
     ObservationFactSource,
     ObservationView,
     VerificationCheck,
+    VerificationDiagnostics,
     VerificationPredicate,
     VerificationPredicateOperator,
     VerificationSpec,
@@ -341,6 +342,7 @@ def test_verifier_agent_matches_structured_blocked_predicate_before_success() ->
 
     assert verdict.status == VerificationStatus.BLOCKED
     assert verdict.blocked_reason == "permission-dialog"
+    assert isinstance(verdict.diagnostics, VerificationDiagnostics)
     assert verdict.diagnostics["suspected_current_state"] == "Permission Dialog"
     assert verdict.diagnostics["suggested_recovery_direction"] == "recover_or_handoff"
 
@@ -471,3 +473,4 @@ def test_verifier_agent_loading_screen_returns_unknown_with_diagnostics() -> Non
     assert verdict.status == VerificationStatus.VERIFIED_UNKNOWN
     assert verdict.diagnostics["suspected_current_state"] == "Loading Screen"
     assert verdict.diagnostics["suggested_recovery_direction"] == "observe_or_recover"
+    assert verdict.model_dump(mode="json")["diagnostics"]["missing_evidence"] is False

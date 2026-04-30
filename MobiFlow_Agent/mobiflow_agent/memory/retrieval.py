@@ -34,7 +34,7 @@ class TaskMemoryRetrievalService:
                     score=score,
                     channel=TaskMemoryRetrievalChannel.DETERMINISTIC,
                     matched_terms=matched_terms,
-                    summary=f"Deterministic memory match score={score:.3f}.",
+                    summary=TaskMemoryRetrievalService._match_summary("Deterministic", score, record),
                 )
             )
         matches.sort(key=lambda item: (-item.score, item.record.updated_at_ms, item.record.memory_id))
@@ -210,7 +210,30 @@ class TaskMemoryRetrievalService:
             score += min(successes, 5) * 0.03
         if failures:
             score -= min(failures, 5) * 0.08
+        risk_reason = TaskMemoryRetrievalService._risk_reason(record)
+        if risk_reason is not None:
+            matched_terms.append(f"risk:{risk_reason}")
+            score -= 0.15
         return matched_terms, score
+
+    @staticmethod
+    def _risk_reason(record: TaskMemoryRecord) -> str | None:
+        feedback = record.feedback if isinstance(record.feedback, dict) else {}
+        risk_reason = feedback.get("risk_reason")
+        if isinstance(risk_reason, str) and risk_reason:
+            return risk_reason
+        failures = int(feedback.get("failure_count", 0) or 0)
+        if failures >= 2:
+            return "negative_feedback_threshold"
+        if "risky_feedback" in {tag.casefold() for tag in record.governance_tags}:
+            return "risky_feedback"
+        return None
+
+    @staticmethod
+    def _match_summary(prefix: str, score: float, record: TaskMemoryRecord) -> str:
+        risk_reason = TaskMemoryRetrievalService._risk_reason(record)
+        risk = f", risk={risk_reason}" if risk_reason else ""
+        return f"{prefix} memory match score={score:.3f}{risk}."
 
     @staticmethod
     def _applicability_matches(query_context: dict, record_context) -> list[str]:

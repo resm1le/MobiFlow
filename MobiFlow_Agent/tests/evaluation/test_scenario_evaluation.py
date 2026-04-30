@@ -189,6 +189,36 @@ def test_scenario_regression_suite_runs_grouped_capability_report() -> None:
     assert contrast.fixed_script_baseline.completed is False
 
 
+def test_scenario_regression_suite_exports_markdown_and_json_reports(artifact_tmp_path) -> None:
+    runner = ScenarioRegressionSuiteRunner(
+        memory_runtime_factory=lambda: TaskMemoryRuntime(store=InMemoryTaskMemoryStore())
+    )
+    report = runner.run_default_suite()
+
+    exported = runner.export_json(report)
+    markdown = runner.export_markdown(report)
+    json_path = runner.write_json(report, artifact_tmp_path / "scenario-report.json")
+    markdown_path = runner.write_markdown(report, artifact_tmp_path / "scenario-report.md")
+
+    assert exported["total_cases"] == report.total_cases
+    assert "fixed_script" in markdown
+    assert "memory_hits=" in markdown
+    assert json_path.exists()
+    assert "# Scenario Regression Report" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_scenario_regression_suite_cli_writes_report(artifact_tmp_path) -> None:
+    from mobiflow_agent.evaluation.scenario.suite import main
+
+    output_path = artifact_tmp_path / "suite.md"
+
+    exit_code = main(["--format", "markdown", "--output", str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.exists()
+    assert "Scenario Regression Report" in output_path.read_text(encoding="utf-8")
+
+
 def test_scenario_memory_comparison_reports_hits_writeback_and_quality_rejections() -> None:
     service = ScenarioMemoryEvaluationService(
         memory_runtime_factory=lambda: TaskMemoryRuntime(store=InMemoryTaskMemoryStore())

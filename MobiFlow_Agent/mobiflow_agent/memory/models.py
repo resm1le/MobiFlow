@@ -151,6 +151,8 @@ class TaskMemoryPolicy(StrictModel):
     allow_unknown_writeback: bool = False
     require_evidence_for_writeback: bool = True
     quality_fail_action: str = Field(default="reject", min_length=1)
+    risky_feedback_failure_threshold: int = Field(default=2, ge=1)
+    quarantine_feedback_failure_threshold: int = Field(default=4, ge=1)
 
 
 class TaskMemoryEmbeddingEntry(StrictModel):

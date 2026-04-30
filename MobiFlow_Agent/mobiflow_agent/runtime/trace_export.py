@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from mobiflow_agent.task.session import TaskSession
@@ -57,6 +58,7 @@ class ExecutionTraceExporter:
             if session.recovery_outcome is None
             else self._redact(session.recovery_outcome.model_dump(mode="json")),
             "memory_context_keys": sorted(session.memory_context),
+            "memory_highlights": self._memory_highlights(session.memory_context),
             "memory_writeback": self._redact(session.memory_context.get("memory_writeback:last")),
             "model_trace": [
                 self._redact(trace.model_dump(mode="json")) for trace in session.model_trace
@@ -108,10 +110,32 @@ class ExecutionTraceExporter:
             )
             if item.get("route"):
                 lines.append(f"  route: {item['route']}")
+            validation = item.get("validation")
+            if isinstance(validation, dict):
+                lines.append(
+                    "  validation: "
+                    f"accepted={validation.get('accepted')} "
+                    f"issues={', '.join(validation.get('issues', [])) or 'none'}"
+                )
+            fallback_decision = item.get("fallback_decision")
+            if isinstance(fallback_decision, dict):
+                lines.append(f"  fallback: {fallback_decision.get('decision_type')} - {fallback_decision.get('summary')}")
         return "\n".join(lines)
 
     def dumps_json(self, session: TaskSession, *, action_traces: list[Any] | None = None) -> str:
         return json.dumps(self.export_json(session, action_traces=action_traces), ensure_ascii=False, indent=2)
+
+    def write_json(self, session: TaskSession, path: str | Path, *, action_traces: list[Any] | None = None) -> Path:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.dumps_json(session, action_traces=action_traces), encoding="utf-8")
+        return output_path
+
+    def write_markdown(self, session: TaskSession, path: str | Path, *, action_traces: list[Any] | None = None) -> Path:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.export_markdown(session, action_traces=action_traces), encoding="utf-8")
+        return output_path
 
     @classmethod
     def _redact(cls, value: Any) -> Any:
@@ -191,9 +215,35 @@ class ExecutionTraceExporter:
                     "evidence_refs": evidence_refs,
                     "model_trace_refs": payload.get("model_trace_refs", []),
                     "action_trace_refs": [ref for ref in action_refs if ref],
+                    "validation": payload.get("validation"),
+                    "model_decision": payload.get("model_decision"),
+                    "fallback_decision": payload.get("fallback_decision"),
                 }
             )
         return timeline
+
+    @staticmethod
+    def _memory_highlights(memory_context: dict[str, Any]) -> list[dict[str, Any]]:
+        highlights: list[dict[str, Any]] = []
+        for key, value in memory_context.items():
+            if not key.startswith("memory_context:") or not isinstance(value, dict):
+                continue
+            for highlight in value.get("highlights", []):
+                if not isinstance(highlight, dict):
+                    continue
+                highlights.append(
+                    {
+                        "role_scope": value.get("role_scope"),
+                        "memory_id": highlight.get("memory_id"),
+                        "kind": highlight.get("kind"),
+                        "summary": highlight.get("summary"),
+                        "score": highlight.get("score"),
+                        "confidence_score": highlight.get("confidence_score"),
+                        "matched_terms": highlight.get("matched_terms", []),
+                        "risk_reason": highlight.get("risk_reason"),
+                    }
+                )
+        return highlights
 
     @staticmethod
     def _node_for_role(role: str | None, decision: dict | None, verdict: dict | None, execution: dict | None) -> str:

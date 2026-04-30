@@ -3,6 +3,7 @@ from __future__ import annotations
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal
 from mobiflow_agent.evaluation.scenario.fixtures import login_success_case
 from mobiflow_agent.platform.simulation import (
+    MOBILE_OBSERVATION_SUMMARY_FACT_ID,
     SIMULATED_SCREEN_FACT_ID,
     SIMULATED_UI_TREE_FACT_ID,
     SimulatedMobilePlatformAdapter,
@@ -39,8 +40,11 @@ def test_observe_target_returns_screen_evidence() -> None:
 
     assert observation.focus_kind == EntityKind.TASK
     assert SIMULATED_SCREEN_FACT_ID in facts
+    assert MOBILE_OBSERVATION_SUMMARY_FACT_ID in facts
     assert SIMULATED_UI_TREE_FACT_ID in facts
     assert facts[SIMULATED_SCREEN_FACT_ID].value["screen_id"] == "launcher"
+    assert facts[MOBILE_OBSERVATION_SUMMARY_FACT_ID].value["screen_id"] == "launcher"
+    assert isinstance(facts[MOBILE_OBSERVATION_SUMMARY_FACT_ID].value["visible_node_ids"], list)
     assert facts[SIMULATED_SCREEN_FACT_ID].evidence_refs[0].handle is not None
 
 

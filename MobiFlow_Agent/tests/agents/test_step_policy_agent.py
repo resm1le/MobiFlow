@@ -86,6 +86,8 @@ def test_step_policy_agent_uses_model_runtime_for_structured_decision() -> None:
 
     assert decision.decision_type == StepDecisionType.PROPOSE_EXECUTION
     assert decision.proposal == proposal
+    assert result.payload["decision_source"] == "model"
+    assert result.payload["validation"]["accepted"] is True
     assert result.payload["model_trace_refs"]
     assert len(session.model_trace) == 1
 
@@ -96,6 +98,8 @@ def test_step_policy_agent_falls_back_when_model_is_not_configured() -> None:
     decision, result = StepPolicyAgent().decide(session)
 
     assert decision.decision_type == StepDecisionType.OBSERVE_AGAIN
+    assert result.payload["decision_source"] == "fallback"
+    assert result.payload["fallback_decision"]["decision_type"] == StepDecisionType.OBSERVE_AGAIN.value
     assert result.payload["model_trace_refs"] == []
 
 
@@ -122,6 +126,11 @@ def test_step_policy_agent_rejects_model_proposal_outside_allowlist() -> None:
 
     assert decision.decision_type == StepDecisionType.OBSERVE_AGAIN
     assert "proposal_action_not_allowed" in decision.summary
+    assert result.payload["decision_source"] == "fallback"
+    assert result.payload["validation"]["accepted"] is False
+    assert "proposal_action_not_allowed" in result.payload["validation"]["issues"]
+    assert result.payload["model_decision"]["decision_id"] == "decision:bad-tool"
+    assert result.payload["fallback_decision"]["decision_type"] == StepDecisionType.OBSERVE_AGAIN.value
     assert result.payload["model_trace_refs"]
 
 

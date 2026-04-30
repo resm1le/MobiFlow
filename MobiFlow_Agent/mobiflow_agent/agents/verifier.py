@@ -11,6 +11,7 @@ from mobiflow_agent.common.contracts import (
     ObservationView,
     StrictModel,
     VerificationCheck,
+    VerificationDiagnostics,
     VerificationPredicate,
     VerificationPredicateOperator,
     VerificationStatus,
@@ -497,10 +498,16 @@ class VerifierAgent:
         unmatched_check_ids: list[str],
         blocked_reason: str | None,
         missing_evidence: bool,
-    ) -> dict:
+    ) -> VerificationDiagnostics:
         suspected_state = None
         if observation is not None:
             for fact in observation.facts:
+                if fact.fact_id == "mobile_observation_summary" and isinstance(fact.value, dict):
+                    suspected_state = fact.value.get("screen_title") or fact.value.get("screen_id")
+                    break
+            for fact in observation.facts:
+                if suspected_state is not None:
+                    break
                 if fact.fact_id == "simulated_screen_snapshot" and isinstance(fact.value, dict):
                     suspected_state = fact.value.get("title") or fact.value.get("screen_id")
                     break
@@ -509,14 +516,14 @@ class VerifierAgent:
             suggested = "recover_or_handoff"
         elif missing_evidence or unmatched_check_ids:
             suggested = "observe_or_recover"
-        return {
-            "suspected_current_state": suspected_state,
-            "matched_check_ids": matched_check_ids,
-            "unmatched_check_ids": unmatched_check_ids,
-            "blocked_reason": blocked_reason,
-            "missing_evidence": missing_evidence,
-            "suggested_recovery_direction": suggested,
-        }
+        return VerificationDiagnostics(
+            suspected_current_state=suspected_state,
+            matched_check_ids=matched_check_ids,
+            unmatched_check_ids=unmatched_check_ids,
+            blocked_reason=blocked_reason,
+            missing_evidence=missing_evidence,
+            suggested_recovery_direction=suggested,
+        )
 
     @staticmethod
     def _candidate_matches(candidate: str, searchable_text: str) -> bool:

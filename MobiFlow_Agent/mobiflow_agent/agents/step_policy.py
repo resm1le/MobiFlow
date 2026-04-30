@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Callable
 
 from mobiflow_agent.agents.contracts import AgentRole, RoleRequest, RoleResult, StepDecision, StepDecisionType
@@ -8,9 +9,18 @@ from mobiflow_agent.common.ids import build_role_result_id
 from mobiflow_agent.model.prompting import StepPolicyPromptBuilder
 from mobiflow_agent.model.runtime import ModelRuntime
 from mobiflow_agent.task.session import TaskSession
-from mobiflow_agent.agents.step_policy_validation import StepPolicyDecisionValidator
+from mobiflow_agent.agents.step_policy_validation import StepPolicyDecisionValidator, StepPolicyValidationResult
 
 StepPolicyCallback = Callable[[TaskSession], StepDecision]
+
+
+@dataclass(frozen=True)
+class StepPolicyDecisionOutcome:
+    decision: StepDecision
+    source: str
+    validation: StepPolicyValidationResult | None = None
+    model_decision: StepDecision | None = None
+    fallback_decision: StepDecision | None = None
 
 
 class StepPolicyAgent:
@@ -35,7 +45,8 @@ class StepPolicyAgent:
         if request is not None and request.role != AgentRole.STEP_POLICY:
             raise ValueError("StepPolicyAgent received a non-step-policy RoleRequest.")
         before_trace_count = len(session.model_trace)
-        decision = self._build_decision(session)
+        outcome = self._build_decision(session)
+        decision = outcome.decision
         trace_refs = [
             trace.invocation_id for trace in session.model_trace[before_trace_count:]
         ]
@@ -47,6 +58,10 @@ class StepPolicyAgent:
             summary=decision.summary,
             payload={
                 "step_decision": decision.model_dump(mode="python"),
+                "decision_source": outcome.source,
+                "validation": self._validation_payload(outcome.validation),
+                "model_decision": self._decision_payload(outcome.model_decision),
+                "fallback_decision": self._decision_payload(outcome.fallback_decision),
                 "model_trace_refs": trace_refs,
             },
             handoff_reason=decision.decision_type.value,
@@ -54,18 +69,28 @@ class StepPolicyAgent:
         )
         return decision, result
 
-    def _build_decision(self, session: TaskSession) -> StepDecision:
+    def _build_decision(self, session: TaskSession) -> StepPolicyDecisionOutcome:
         if self._step_policy is not None:
-            return self._step_policy(session)
+            return StepPolicyDecisionOutcome(decision=self._step_policy(session), source="callback")
         model_decision = self._decide_with_model(session)
         if model_decision is None:
-            return self._default_decision(session)
+            fallback = self._default_decision(session)
+            return StepPolicyDecisionOutcome(
+                decision=fallback,
+                source="fallback",
+                fallback_decision=fallback,
+            )
         validation = self._decision_validator.validate(session, model_decision)
         if validation.accepted:
-            return model_decision
+            return StepPolicyDecisionOutcome(
+                decision=model_decision,
+                source="model",
+                validation=validation,
+                model_decision=model_decision,
+            )
         fallback = self._default_decision(session)
         if fallback.decision_type == StepDecisionType.OBSERVE_AGAIN:
-            return fallback.model_copy(
+            fallback = fallback.model_copy(
                 update={
                     "summary": (
                         "Model step policy decision was rejected "
@@ -73,7 +98,26 @@ class StepPolicyAgent:
                     )
                 }
             )
-        return fallback
+        return StepPolicyDecisionOutcome(
+            decision=fallback,
+            source="fallback",
+            validation=validation,
+            model_decision=model_decision,
+            fallback_decision=fallback,
+        )
+
+    @staticmethod
+    def _validation_payload(validation: StepPolicyValidationResult | None) -> dict | None:
+        if validation is None:
+            return None
+        return {
+            "accepted": validation.accepted,
+            "issues": list(validation.issues),
+        }
+
+    @staticmethod
+    def _decision_payload(decision: StepDecision | None) -> dict | None:
+        return None if decision is None else decision.model_dump(mode="python")
 
     def _decide_with_model(self, session: TaskSession) -> StepDecision | None:
         if self._model_client is None or session.active_model_profile is None:
@@ -195,9 +239,20 @@ class StepPolicyAgent:
         return {}
 
     @staticmethod
+    def _mobile_summary(observation: ObservationView) -> dict:
+        for fact in observation.facts:
+            if fact.fact_id == "mobile_observation_summary" and isinstance(fact.value, dict):
+                return fact.value
+        return {}
+
+    @staticmethod
     def _step_policy_blocked_reason(observation: ObservationView | None) -> str | None:
         if observation is None:
             return None
+        summary = StepPolicyAgent._mobile_summary(observation)
+        blocked_state = summary.get("blocked_state")
+        if isinstance(blocked_state, str) and blocked_state:
+            return blocked_state
         screen = StepPolicyAgent._screen_snapshot(observation)
         metadata = screen.get("metadata") if isinstance(screen.get("metadata"), dict) else {}
         blocked_reason = metadata.get("step_policy_blocked_reason")

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import argparse
+import json
 from collections.abc import Callable
 from enum import Enum
+from pathlib import Path
 
 from pydantic import Field
 
@@ -182,6 +185,60 @@ class ScenarioRegressionSuiteRunner:
             fixed_script_baseline=fixed_script_baseline,
         )
 
+    def export_json(self, report: ScenarioRegressionReport) -> dict:
+        return report.model_dump(mode="json")
+
+    def export_markdown(self, report: ScenarioRegressionReport) -> str:
+        lines = [
+            "# Scenario Regression Report",
+            "",
+            report.summary,
+            "",
+            f"- Total cases: {report.total_cases}",
+            f"- Matched cases: {report.matched_cases}",
+            f"- Mismatched cases: {report.mismatched_cases}",
+            "",
+        ]
+        for group in ScenarioRegressionGroup:
+            group_results = [result for result in report.results if result.group == group]
+            if not group_results:
+                continue
+            lines.extend([f"## {group.value}", ""])
+            for result in group_results:
+                lines.append(
+                    f"- {result.scenario_id} ({result.capability}): "
+                    f"matched={result.matched}, final={result.final_status}, "
+                    f"verification={result.verification_status or 'none'}"
+                )
+                lines.append(
+                    f"  actions={', '.join(result.action_names) or 'none'}, "
+                    f"recovery={result.entered_recovery}, approval={result.approval_pause}, "
+                    f"memory_hits={result.memory_hit_count}, memory_writeback={result.memory_writeback_count}"
+                )
+                if result.fixed_script_baseline is not None:
+                    baseline = result.fixed_script_baseline
+                    lines.append(
+                        f"  fixed_script: completed={baseline.completed}, "
+                        f"final_screen={baseline.final_screen_id}, failed_step={baseline.failed_step_index}"
+                    )
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
+
+    def write_json(self, report: ScenarioRegressionReport, path: str | Path) -> Path:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(self.export_json(report), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return output_path
+
+    def write_markdown(self, report: ScenarioRegressionReport, path: str | Path) -> Path:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.export_markdown(report), encoding="utf-8")
+        return output_path
+
     @staticmethod
     def _case_result(
         *,
@@ -216,10 +273,36 @@ class ScenarioRegressionSuiteRunner:
         )
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the MobiFlow Agent scenario regression suite.")
+    parser.add_argument("--format", choices=["json", "markdown"], default="markdown")
+    parser.add_argument("--output", type=Path, default=None)
+    args = parser.parse_args(argv)
+
+    runner = ScenarioRegressionSuiteRunner()
+    report = runner.run_default_suite()
+    if args.output is not None:
+        if args.format == "json":
+            runner.write_json(report, args.output)
+        else:
+            runner.write_markdown(report, args.output)
+    else:
+        if args.format == "json":
+            print(json.dumps(runner.export_json(report), ensure_ascii=False, indent=2))
+        else:
+            print(runner.export_markdown(report))
+    return 0 if report.mismatched_cases == 0 else 1
+
+
 __all__ = [
+    "main",
     "ScenarioRegressionCaseResult",
     "ScenarioRegressionCaseSpec",
     "ScenarioRegressionGroup",
     "ScenarioRegressionReport",
     "ScenarioRegressionSuiteRunner",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

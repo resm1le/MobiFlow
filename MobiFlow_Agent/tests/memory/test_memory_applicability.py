@@ -1,6 +1,13 @@
 from mobiflow_agent.agents import AgentRole
 from mobiflow_agent.common.contracts import EntityKind, VerificationStatus, VerificationVerdict
-from mobiflow_agent.memory import InMemoryTaskMemoryStore, TaskMemoryRecord, TaskMemoryRecordKind, TaskMemoryQuery
+from mobiflow_agent.memory import (
+    InMemoryTaskMemoryStore,
+    TaskMemoryPolicy,
+    TaskMemoryRecord,
+    TaskMemoryRecordKind,
+    TaskMemoryQuery,
+    TaskMemoryRecordStatus,
+)
 from mobiflow_agent.memory.retrieval import TaskMemoryRetrievalService
 from mobiflow_agent.memory.runtime import TaskMemoryRuntime
 from mobiflow_agent.memory.store import build_memory_timestamp_ms
@@ -109,6 +116,7 @@ def test_memory_retrieval_penalizes_negative_feedback() -> None:
 
     assert result.matches[0].record.memory_id == "memory:trusted"
     assert result.matches[0].score > result.matches[1].score
+    assert "risk=negative_feedback_threshold" in result.matches[1].summary
 
 
 def test_memory_runtime_records_negative_feedback_for_retrieved_memory() -> None:
@@ -148,3 +156,53 @@ def test_memory_runtime_records_negative_feedback_for_retrieved_memory() -> None
     assert updated is not None
     assert updated.feedback["failure_count"] == 1
     assert updated.confidence_score < 0.7
+
+
+def test_memory_runtime_marks_risky_and_quarantines_repeated_negative_feedback() -> None:
+    store = InMemoryTaskMemoryStore()
+    store.put_record(
+        _record(
+            "memory:risky-used",
+            screen_id="loading",
+            failure_type="slow_loading",
+            summary="Repeatedly risky recovery.",
+            confidence_score=0.7,
+        )
+    )
+    runtime = TaskMemoryRuntime(
+        store=store,
+        policy=TaskMemoryPolicy(
+            risky_feedback_failure_threshold=1,
+            quarantine_feedback_failure_threshold=2,
+        ),
+    )
+    step = TaskStep(step_id="recover-step", kind=TaskStepKind.RECOVER, goal="Recover login flow.")
+    session = TaskSession(
+        session_id="session-risky-feedback",
+        goal="Recover login flow",
+        target_kind=EntityKind.TASK,
+        target_id="login",
+        plan=TaskPlan(plan_id="plan-1", summary="Recover.", steps=[step]),
+        current_step=step,
+    )
+    runtime.prepare_context(session, role=AgentRole.RECOVERY)
+    session.last_verdict = VerificationVerdict(
+        verdict_id="verdict-unknown",
+        status=VerificationStatus.VERIFIED_UNKNOWN,
+        summary="Recovery did not work.",
+        target_kind=EntityKind.TASK,
+        target_id="login",
+        unmatched_check_ids=["home"],
+    )
+
+    runtime.writeback_session(session)
+    first = store.get_record("memory:risky-used")
+    assert first is not None
+    assert "risky_feedback" in first.governance_tags
+    assert first.feedback["risk_reason"] == "negative_feedback_threshold"
+
+    runtime.writeback_session(session)
+    second = store.get_record("memory:risky-used")
+    assert second is not None
+    assert second.status == TaskMemoryRecordStatus.QUARANTINED
+    assert "quarantined_feedback" in second.governance_tags
