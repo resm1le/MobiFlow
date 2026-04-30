@@ -101,8 +101,10 @@ class RecoveryAgent:
         guidance = None
         execution_context = None
         blocked_reason = getattr(failure_verdict, "blocked_reason", None)
-        if blocked_reason == "dynamic_recovery_retry":
+        if blocked_reason in {"dynamic_recovery_retry", "slow_loading_screen"}:
             summary = "Recovery requested retrying the current dynamic step."
+            if blocked_reason == "slow_loading_screen":
+                summary = "Recovery requested a fresh observation after a slow loading screen."
             return RecoveryOutcome(
                 summary=summary,
                 target_kind=target_kind,

@@ -8,6 +8,8 @@ from mobiflow_agent.common.contracts import (
     ObservationFactSource,
     ObservationView,
     VerificationCheck,
+    VerificationPredicate,
+    VerificationPredicateOperator,
     VerificationSpec,
     VerificationStatus,
 )
@@ -163,3 +165,123 @@ def test_verifier_agent_model_interpretation_cannot_override_missing_evidence() 
     assert verdict.unmatched_check_ids == ["run-cancelled"]
     assert role_result.payload["model_trace_refs"]
     assert len(session.model_trace) == 1
+
+
+def test_verifier_agent_matches_structured_predicates_before_text_fallback() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:screen-home",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-screen-visible",
+                description="The home screen is visible.",
+                evidence_hint="text that is intentionally absent",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_screen_snapshot",
+                        field_path="value.title",
+                        operator=VerificationPredicateOperator.EQUALS,
+                        expected="Home Screen",
+                    ),
+                    VerificationPredicate(
+                        fact_id="simulated_ui_tree",
+                        field_path="value[].node_id",
+                        operator=VerificationPredicateOperator.ANY_EQUALS,
+                        expected="home_title",
+                    ),
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-home",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "home", "title": "Home Screen"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="screen-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Screen evidence.",
+                        locator="home",
+                    )
+                ],
+            ),
+            ObservationFact(
+                fact_id="simulated_ui_tree",
+                source=ObservationFactSource.PLATFORM,
+                title="Tree",
+                value=[{"node_id": "home_title", "text": "Welcome"}],
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="tree-evidence",
+                        kind=EvidenceKind.ARTIFACT,
+                        summary="Tree evidence.",
+                        locator="home",
+                    )
+                ],
+            ),
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.VERIFIED_SUCCESS
+    assert verdict.matched_check_ids == ["home-screen-visible"]
+
+
+def test_verifier_agent_returns_unknown_when_structured_predicate_lacks_evidence_match() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:screen-home",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-screen-visible",
+                description="The home screen is visible.",
+                evidence_hint="Home Screen",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_screen_snapshot",
+                        field_path="value.title",
+                        operator=VerificationPredicateOperator.EQUALS,
+                        expected="Home Screen",
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-loading",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "loading", "title": "Loading Screen"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="screen-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Screen evidence.",
+                        locator="loading",
+                    )
+                ],
+            )
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.VERIFIED_UNKNOWN
+    assert verdict.unmatched_check_ids == ["home-screen-visible"]

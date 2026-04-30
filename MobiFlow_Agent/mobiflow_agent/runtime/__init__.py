@@ -24,7 +24,6 @@ from mobiflow_agent.runtime.state import (
     RecoveryObservationResult,
     RuntimeLifecycle,
 )
-
 __all__ = [
     "AgentRuntimeState",
     "CallerContext",
@@ -33,6 +32,7 @@ __all__ = [
     "ContextCompressionResult",
     "ContextCompressionService",
     "ContextHandoff",
+    "ExecutionTraceExporter",
     "PendingExecution",
     "RecoveryExecutionContext",
     "RecoveryObservationResult",
@@ -80,5 +80,8 @@ def __getattr__(name: str):
     }
     if name in harness_exports:
         module = import_module("mobiflow_agent.runtime.harness")
+        return getattr(module, name)
+    if name == "ExecutionTraceExporter":
+        module = import_module("mobiflow_agent.runtime.trace_export")
         return getattr(module, name)
     raise AttributeError(f"module 'mobiflow_agent.runtime' has no attribute {name!r}")

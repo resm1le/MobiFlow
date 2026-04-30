@@ -72,6 +72,7 @@ class TaskMemoryQuery(StrictModel):
     tags: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1)
     semantic_query_text: str | None = None
+    applicability_context: dict[str, Any] = Field(default_factory=dict)
     min_score: float = Field(default=0.0, ge=0.0)
     statuses: list[TaskMemoryRecordStatus] = Field(default_factory=list)
     include_expired: bool = False

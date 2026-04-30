@@ -39,6 +39,7 @@ __all__ = [
     "PlannerPromptBuilder",
     "RecoveryPromptBuilder",
     "RoleModelPolicy",
+    "StepPolicyPromptBuilder",
     "StructuredGenerationRequest",
     "StructuredGenerationResult",
     "VerifierPromptBuilder",
@@ -46,7 +47,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name in {"PlannerPromptBuilder", "RecoveryPromptBuilder", "VerifierPromptBuilder"}:
+    if name in {"PlannerPromptBuilder", "RecoveryPromptBuilder", "StepPolicyPromptBuilder", "VerifierPromptBuilder"}:
         module = import_module("mobiflow_agent.model.prompting")
         return getattr(module, name)
     if name == "OpenAICompatibleProviderConfig":

@@ -158,7 +158,24 @@ class VerificationCheck(StrictModel):
     check_id: str = Field(min_length=1)
     description: str = Field(min_length=1)
     evidence_hint: str | None = None
+    predicates: list["VerificationPredicate"] = Field(default_factory=list)
     required: bool = True
+
+
+class VerificationPredicateOperator(str, Enum):
+    EXISTS = "exists"
+    EQUALS = "equals"
+    CONTAINS = "contains"
+    ANY_EQUALS = "any_equals"
+    ANY_CONTAINS = "any_contains"
+
+
+class VerificationPredicate(StrictModel):
+    field_path: str = Field(min_length=1)
+    operator: VerificationPredicateOperator = VerificationPredicateOperator.EQUALS
+    expected: Any | None = None
+    fact_id: str | None = None
+    case_sensitive: bool = False
 
 
 class VerificationSpec(StrictModel):
@@ -211,6 +228,8 @@ __all__ = [
     "TaskConstraint",
     "TaskContract",
     "VerificationCheck",
+    "VerificationPredicate",
+    "VerificationPredicateOperator",
     "VerificationSpec",
     "VerificationStatus",
     "VerificationVerdict",

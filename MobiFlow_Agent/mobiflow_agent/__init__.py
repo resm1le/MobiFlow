@@ -32,6 +32,8 @@ from mobiflow_agent.common import (
     TaskConstraint,
     TaskContract,
     VerificationCheck,
+    VerificationPredicate,
+    VerificationPredicateOperator,
     VerificationSpec,
     VerificationStatus,
     VerificationVerdict,
@@ -39,6 +41,9 @@ from mobiflow_agent.common import (
 from mobiflow_agent.control import TaskAgentDispatcher, TaskControlPolicy
 from mobiflow_agent.control.orchestrator import TaskOrchestratorService
 from mobiflow_agent.evaluation import (
+    FixedScriptBaselineResult,
+    FixedScriptBaselineRunner,
+    FixedScriptStep,
     ScenarioEvaluationCase,
     ScenarioEvaluationReport,
     ScenarioEvaluationResult,
@@ -101,7 +106,7 @@ from mobiflow_agent.memory import (
     TaskMemoryWritebackRequest,
     TaskMemoryWritebackResult,
 )
-from mobiflow_agent.model.prompting import PlannerPromptBuilder, RecoveryPromptBuilder, VerifierPromptBuilder
+from mobiflow_agent.model.prompting import PlannerPromptBuilder, RecoveryPromptBuilder, StepPolicyPromptBuilder, VerifierPromptBuilder
 from mobiflow_agent.platform import (
     SimulatedActionTrace,
     SimulatedMobilePlatformAdapter,
@@ -115,6 +120,7 @@ from mobiflow_agent.runtime import (
     ContextCompressionResult,
     ContextCompressionService,
     ContextHandoff,
+    ExecutionTraceExporter,
     SessionContextDigest,
     StepContextSummary,
 )
@@ -135,7 +141,11 @@ __all__ = [
     "EvidenceKind",
     "EvidenceRef",
     "ExecutionProposal",
+    "ExecutionTraceExporter",
     "ExecutorAgent",
+    "FixedScriptBaselineResult",
+    "FixedScriptBaselineRunner",
+    "FixedScriptStep",
     "InMemoryTaskMemoryStore",
     "ModelClient",
     "ModelError",
@@ -184,6 +194,7 @@ __all__ = [
     "StepContextSummary",
     "StepDecision",
     "StepDecisionType",
+    "StepPolicyPromptBuilder",
     "StepPolicyAgent",
     "SqliteTaskMemoryStore",
     "TaskAgentDispatcher",
@@ -230,6 +241,8 @@ __all__ = [
     "TaskMemoryWritebackRequest",
     "TaskMemoryWritebackResult",
     "VerificationCheck",
+    "VerificationPredicate",
+    "VerificationPredicateOperator",
     "VerificationSpec",
     "VerificationStatus",
     "VerificationVerdict",

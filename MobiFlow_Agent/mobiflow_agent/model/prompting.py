@@ -149,9 +149,48 @@ class VerifierPromptBuilder:
         )
 
 
+class StepPolicyPromptBuilder:
+    def build(self, *, session: TaskSession) -> PromptBundle:
+        step = session.current_step
+        step_id = step.step_id if step is not None else "session"
+        return PromptBundle(
+            system_prompt=(
+                "You are the bounded step-policy role for a task-first mobile agent. "
+                "Choose exactly one structured StepDecision. Do not propose side effects outside the current allowlist."
+            ),
+            user_prompt="",
+            context_payload={
+                "goal": session.goal,
+                "current_step": None if step is None else step.model_dump(mode="python"),
+                "allowed_side_effects": [] if step is None else list(step.allowed_side_effects),
+                "last_observation": (
+                    None if session.last_observation is None else session.last_observation.model_dump(mode="python")
+                ),
+                "last_execution_result": (
+                    None
+                    if session.last_execution_result is None
+                    else session.last_execution_result.model_dump(mode="python")
+                ),
+                "last_verdict": None if session.last_verdict is None else session.last_verdict.model_dump(mode="python"),
+                "recent_step_decisions": [
+                    decision.model_dump(mode="python") for decision in session.step_decisions[-5:]
+                ],
+                "memory_context": session.memory_context.get(step_id, session.memory_context.get("step_policy", {})),
+                "session_digest": (
+                    session.session_digest.model_dump(mode="python")
+                    if session.session_digest is not None
+                    else None
+                ),
+            },
+            preserve_keys=["goal", "current_step", "allowed_side_effects", "last_observation"],
+            metadata={"prompt_kind": "step_policy"},
+        )
+
+
 __all__ = [
     "PlannerPromptBuilder",
     "PromptBundle",
     "RecoveryPromptBuilder",
+    "StepPolicyPromptBuilder",
     "VerifierPromptBuilder",
 ]

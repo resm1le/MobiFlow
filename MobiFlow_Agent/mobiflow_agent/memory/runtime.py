@@ -258,6 +258,7 @@ class TaskMemoryRuntime:
             tags=self._query_tags(session, role=role),
             top_k=top_k,
             semantic_query_text=semantic_query_text or None,
+            applicability_context=self._applicability_payload(session),
             min_score=self._policy.min_score,
         )
 
@@ -268,6 +269,7 @@ class TaskMemoryRuntime:
         base_payload = {
             "session_id": session.session_id,
             "status": session.status.value,
+            "applicability": self._applicability_payload(session),
             "completion_verdict": (
                 session.completion_verdict.value if session.completion_verdict is not None else None
             ),
@@ -319,6 +321,7 @@ class TaskMemoryRuntime:
                         "matched_check_ids": list(session.last_verdict.matched_check_ids),
                         "unmatched_check_ids": list(session.last_verdict.unmatched_check_ids),
                         "blocked_reason": session.last_verdict.blocked_reason,
+                        "applicability": self._applicability_payload(session),
                     },
                     created_at_ms=now_ms,
                 )
@@ -340,6 +343,7 @@ class TaskMemoryRuntime:
                             else None
                         ),
                         "has_execution_context": session.recovery_outcome.execution_context is not None,
+                        "applicability": self._applicability_payload(session),
                     },
                     created_at_ms=now_ms,
                 )
@@ -527,6 +531,10 @@ class TaskMemoryRuntime:
             tags.append(session.last_verdict.status.value)
             if session.last_verdict.blocked_reason is not None:
                 tags.append(session.last_verdict.blocked_reason)
+        applicability = TaskMemoryRuntime._applicability_payload(session)
+        for key in ["screen_id", "failure_type", "recovery_action"]:
+            if applicability.get(key):
+                tags.append(str(applicability[key]))
         return TaskMemoryRuntime._normalized_tags(tags)
 
     @staticmethod
@@ -540,7 +548,62 @@ class TaskMemoryRuntime:
                 tags.append(session.last_verdict.blocked_reason)
         if session.recovery_outcome is not None:
             tags.append("recovery")
+        applicability = TaskMemoryRuntime._applicability_payload(session)
+        for key in ["screen_id", "failure_type", "recovery_action"]:
+            if applicability.get(key):
+                tags.append(str(applicability[key]))
         return TaskMemoryRuntime._normalized_tags(tags)
+
+    @staticmethod
+    def _applicability_payload(session: TaskSession) -> dict[str, Any]:
+        screen = TaskMemoryRuntime._screen_snapshot(session)
+        verdict_status = session.last_verdict.status.value if session.last_verdict is not None else None
+        recovery_action = None
+        if session.recovery_outcome is not None and session.recovery_outcome.replan_decision is not None:
+            recovery_action = session.recovery_outcome.replan_decision.decision_type.value
+        return {
+            "step_id": session.current_step.step_id if session.current_step is not None else None,
+            "step_kind": session.current_step.kind.value if session.current_step is not None else None,
+            "phase_goal": session.current_step.goal if session.current_step is not None else None,
+            "allowed_side_effects": list(session.current_step.allowed_side_effects)
+            if session.current_step is not None
+            else [],
+            "screen_id": screen.get("screen_id"),
+            "screen_title": screen.get("title"),
+            "ui_node_ids": TaskMemoryRuntime._ui_node_ids(session),
+            "failure_type": session.last_verdict.blocked_reason
+            if session.last_verdict is not None and session.last_verdict.blocked_reason is not None
+            else verdict_status,
+            "recovery_action": recovery_action,
+            "post_verification_status": verdict_status,
+            "matched_check_ids": list(session.last_verdict.matched_check_ids)
+            if session.last_verdict is not None
+            else [],
+        }
+
+    @staticmethod
+    def _screen_snapshot(session: TaskSession) -> dict[str, Any]:
+        observation = session.last_observation
+        if observation is None:
+            return {}
+        for fact in observation.facts:
+            if fact.fact_id == "simulated_screen_snapshot" and isinstance(fact.value, dict):
+                return fact.value
+        return {}
+
+    @staticmethod
+    def _ui_node_ids(session: TaskSession) -> list[str]:
+        observation = session.last_observation
+        if observation is None:
+            return []
+        for fact in observation.facts:
+            if fact.fact_id == "simulated_ui_tree" and isinstance(fact.value, list):
+                return [
+                    str(node.get("node_id"))
+                    for node in fact.value[:20]
+                    if isinstance(node, dict) and node.get("node_id") is not None
+                ]
+        return []
 
     @staticmethod
     def _proposal_fingerprint(session: TaskSession) -> str | None:

@@ -1,8 +1,10 @@
 from mobiflow_agent.evaluation.scenario.fixtures import (
     approval_required_destructive_action_case,
     dynamic_approval_required_destructive_action_case,
+    dynamic_fixed_script_contrast_case,
     dynamic_login_success_case,
     dynamic_recovery_retry_success_case,
+    dynamic_slow_loading_recovery_success_case,
     handoff_followup_case,
     login_success_case,
     memory_blocks_wrong_success_case,
@@ -10,6 +12,11 @@ from mobiflow_agent.evaluation.scenario.fixtures import (
     memory_writeback_quality_rejects_unknown_case,
     missing_password_blocked_case,
     wrong_button_no_success_case,
+)
+from mobiflow_agent.evaluation.scenario.baseline import (
+    FixedScriptBaselineResult,
+    FixedScriptBaselineRunner,
+    FixedScriptStep,
 )
 from mobiflow_agent.evaluation.scenario.models import (
     ScenarioEvaluationCase,
@@ -34,10 +41,15 @@ __all__ = [
     "ScenarioMemoryComparisonResult",
     "ScenarioMemoryEvaluationService",
     "ScenarioQualityGate",
+    "FixedScriptBaselineResult",
+    "FixedScriptBaselineRunner",
+    "FixedScriptStep",
     "approval_required_destructive_action_case",
     "dynamic_approval_required_destructive_action_case",
+    "dynamic_fixed_script_contrast_case",
     "dynamic_login_success_case",
     "dynamic_recovery_retry_success_case",
+    "dynamic_slow_loading_recovery_success_case",
     "handoff_followup_case",
     "login_success_case",
     "memory_blocks_wrong_success_case",

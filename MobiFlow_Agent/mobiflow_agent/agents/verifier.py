@@ -10,6 +10,9 @@ from mobiflow_agent.common.contracts import (
     EvidenceRef,
     ObservationView,
     StrictModel,
+    VerificationCheck,
+    VerificationPredicate,
+    VerificationPredicateOperator,
     VerificationStatus,
     VerificationVerdict,
 )
@@ -212,10 +215,9 @@ class VerifierAgent:
             matched_check_ids = [
                 check.check_id
                 for check in spec.success_checks
-                if self._matches_check(
-                    check_id=check.check_id,
-                    description=check.description,
-                    evidence_hint=check.evidence_hint,
+                if self._matches_verification_check(
+                    check=check,
+                    observation=observation,
                     searchable_text=searchable_text,
                     has_evidence=bool(evidence_refs),
                 )
@@ -317,6 +319,103 @@ class VerifierAgent:
             if VerifierAgent._candidate_matches(candidate, searchable_text):
                 return True
         return False
+
+    @staticmethod
+    def _matches_verification_check(
+        *,
+        check: VerificationCheck,
+        observation: ObservationView | None,
+        searchable_text: str,
+        has_evidence: bool,
+    ) -> bool:
+        if check.predicates:
+            return all(
+                VerifierAgent._matches_predicate(predicate, observation)
+                for predicate in check.predicates
+            )
+        return VerifierAgent._matches_check(
+            check_id=check.check_id,
+            description=check.description,
+            evidence_hint=check.evidence_hint,
+            searchable_text=searchable_text,
+            has_evidence=has_evidence,
+        )
+
+    @staticmethod
+    def _matches_predicate(predicate: VerificationPredicate, observation: ObservationView | None) -> bool:
+        if observation is None:
+            return False
+        candidate_facts = [
+            fact
+            for fact in observation.facts
+            if predicate.fact_id is None or fact.fact_id == predicate.fact_id
+        ]
+        for fact in candidate_facts:
+            values = VerifierAgent._resolve_path(fact.model_dump(mode="python"), predicate.field_path)
+            if VerifierAgent._predicate_values_match(predicate, values):
+                return True
+        return False
+
+    @staticmethod
+    def _resolve_path(payload, field_path: str) -> list:
+        values = [payload]
+        for raw_part in field_path.split("."):
+            expand_list = raw_part.endswith("[]")
+            part = raw_part[:-2] if expand_list else raw_part
+            next_values = []
+            for value in values:
+                if isinstance(value, dict) and part in value:
+                    resolved = value[part]
+                else:
+                    continue
+                if expand_list and isinstance(resolved, list):
+                    next_values.extend(resolved)
+                else:
+                    next_values.append(resolved)
+            values = next_values
+            if not values:
+                break
+        return values
+
+    @staticmethod
+    def _predicate_values_match(predicate: VerificationPredicate, values: list) -> bool:
+        if predicate.operator == VerificationPredicateOperator.EXISTS:
+            return bool(values)
+        if predicate.operator in {
+            VerificationPredicateOperator.ANY_EQUALS,
+            VerificationPredicateOperator.ANY_CONTAINS,
+        }:
+            values = [
+                item
+                for value in values
+                for item in (value if isinstance(value, list) else [value])
+            ]
+        return any(VerifierAgent._predicate_value_matches(predicate, value) for value in values)
+
+    @staticmethod
+    def _predicate_value_matches(predicate: VerificationPredicate, value) -> bool:
+        operator = predicate.operator
+        if operator in {VerificationPredicateOperator.EQUALS, VerificationPredicateOperator.ANY_EQUALS}:
+            return VerifierAgent._normalize_predicate_value(value, predicate.case_sensitive) == VerifierAgent._normalize_predicate_value(
+                predicate.expected,
+                predicate.case_sensitive,
+            )
+        if operator in {VerificationPredicateOperator.CONTAINS, VerificationPredicateOperator.ANY_CONTAINS}:
+            if predicate.expected is None:
+                return False
+            haystack = str(value)
+            needle = str(predicate.expected)
+            if not predicate.case_sensitive:
+                haystack = haystack.casefold()
+                needle = needle.casefold()
+            return needle in haystack
+        return False
+
+    @staticmethod
+    def _normalize_predicate_value(value, case_sensitive: bool):
+        if isinstance(value, str) and not case_sensitive:
+            return value.casefold()
+        return value
 
     @staticmethod
     def _candidate_matches(candidate: str, searchable_text: str) -> bool:

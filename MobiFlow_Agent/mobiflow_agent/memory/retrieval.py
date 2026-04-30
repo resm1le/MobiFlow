@@ -193,7 +193,43 @@ class TaskMemoryRetrievalService:
             score += 0.3
         if query.tags:
             score += len(set(tag.casefold() for tag in query.tags).intersection(tag.casefold() for tag in record.tags)) * 0.1
+        applicability_matches = TaskMemoryRetrievalService._applicability_matches(
+            query.applicability_context,
+            record.content_payload.get("applicability")
+            if isinstance(record.content_payload, dict)
+            else None,
+        )
+        if applicability_matches:
+            matched_terms.extend(applicability_matches)
+            score += len(applicability_matches) * 0.2
         return matched_terms, score
+
+    @staticmethod
+    def _applicability_matches(query_context: dict, record_context) -> list[str]:
+        if not query_context or not isinstance(record_context, dict):
+            return []
+        matches: list[str] = []
+        for key, query_value in query_context.items():
+            if query_value in (None, "", []):
+                continue
+            record_value = record_context.get(key)
+            if TaskMemoryRetrievalService._context_value_matches(query_value, record_value):
+                matches.append(f"applicability:{key}")
+        return matches
+
+    @staticmethod
+    def _context_value_matches(query_value, record_value) -> bool:
+        if record_value in (None, "", []):
+            return False
+        if isinstance(query_value, list):
+            query_values = {str(value).casefold() for value in query_value}
+        else:
+            query_values = {str(query_value).casefold()}
+        if isinstance(record_value, list):
+            record_values = {str(value).casefold() for value in record_value}
+        else:
+            record_values = {str(record_value).casefold()}
+        return bool(query_values.intersection(record_values))
 
     @staticmethod
     def _cosine_similarity(left: list[float], right: list[float]) -> float:

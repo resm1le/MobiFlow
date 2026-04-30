@@ -253,6 +253,102 @@ def dynamic_recovery_retry_success_case() -> ScenarioEvaluationCase:
     )
 
 
+def dynamic_slow_loading_recovery_success_case() -> ScenarioEvaluationCase:
+    scenario_id = "dynamic_slow_loading_recovery_success"
+    scenario = SimulatedMobileScenario(
+        scenario_id=scenario_id,
+        name="Dynamic slow loading recovery success",
+        initial_screen_id="loading",
+        screens={
+            "loading": SimulatedScreen(
+                screen_id="loading",
+                title="Loading Screen",
+                metadata={
+                    "step_policy_blocked_reason": "slow_loading_screen",
+                    "auto_advance_to_after_observe": "home",
+                },
+                nodes=[SimulatedUiNode(node_id="spinner", text="Loading")],
+            ),
+            "home": SimulatedScreen(
+                screen_id="home",
+                title="Home Screen",
+                nodes=[SimulatedUiNode(node_id="home_title", text="Welcome home")],
+            ),
+        },
+    )
+    return ScenarioEvaluationCase(
+        scenario_id=scenario_id,
+        name=scenario_id,
+        platform_scenario=scenario,
+        requests=[
+            TaskHarnessRequest(
+                goal="[dynamic] Recover from slow loading and verify home screen.",
+                target_kind=EntityKind.TASK,
+                target_id=scenario_id,
+                verification_spec=_verification_spec(scenario_id, "Home Screen"),
+            )
+        ],
+        expectation=ScenarioExpectation(
+            expected_final_status=TaskHarnessStatus.COMPLETED,
+            expected_verification_status=VerificationStatus.VERIFIED_SUCCESS,
+            expect_recovery_path=True,
+        ),
+        allow_recovery=True,
+    )
+
+
+def dynamic_fixed_script_contrast_case() -> ScenarioEvaluationCase:
+    scenario = _login_scenario(scenario_id="dynamic_fixed_script_contrast").model_copy(deep=True)
+    scenario = scenario.model_copy(
+        update={
+            "screens": {
+                **scenario.screens,
+                "permission": SimulatedScreen(
+                    screen_id="permission",
+                    title="Permission Dialog",
+                    nodes=[SimulatedUiNode(node_id="allow_button", role="button", text="Allow")],
+                ),
+            },
+            "transitions": [
+                SimulatedTransition(
+                    action_tool_name="mobile.launch",
+                    from_screen_id="launcher",
+                    to_screen_id="permission",
+                    match_arguments={"app": "demo"},
+                ),
+                SimulatedTransition(
+                    action_tool_name="mobile.tap",
+                    from_screen_id="permission",
+                    to_screen_id="login_blank",
+                    match_arguments={"node_id": "allow_button"},
+                ),
+                *scenario.transitions[1:],
+            ],
+        },
+        deep=True,
+    )
+    scenario_id = scenario.scenario_id
+    return ScenarioEvaluationCase(
+        scenario_id=scenario_id,
+        name=scenario_id,
+        platform_scenario=scenario,
+        requests=[
+            TaskHarnessRequest(
+                goal="[dynamic] Login while handling unexpected permission dialog.",
+                target_kind=EntityKind.TASK,
+                target_id=scenario_id,
+                verification_spec=_verification_spec(scenario_id, "Home Screen"),
+            )
+        ],
+        expectation=ScenarioExpectation(
+            expected_final_status=TaskHarnessStatus.COMPLETED,
+            expected_verification_status=VerificationStatus.VERIFIED_SUCCESS,
+            required_actions=["mobile.launch", "mobile.tap", "mobile.input_text"],
+        ),
+        allow_recovery=False,
+    )
+
+
 def wrong_button_no_success_case() -> ScenarioEvaluationCase:
     scenario = _login_scenario(scenario_id="wrong_button_no_success")
     scenario_id = scenario.scenario_id
@@ -571,8 +667,10 @@ def _verification_spec(
 __all__ = [
     "approval_required_destructive_action_case",
     "dynamic_approval_required_destructive_action_case",
+    "dynamic_fixed_script_contrast_case",
     "dynamic_login_success_case",
     "dynamic_recovery_retry_success_case",
+    "dynamic_slow_loading_recovery_success_case",
     "handoff_followup_case",
     "login_success_case",
     "memory_blocks_wrong_success_case",

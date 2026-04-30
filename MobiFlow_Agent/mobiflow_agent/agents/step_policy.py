@@ -5,33 +5,74 @@ from typing import Callable
 from mobiflow_agent.agents.contracts import AgentRole, RoleRequest, RoleResult, StepDecision, StepDecisionType
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, ObservationView
 from mobiflow_agent.common.ids import build_role_result_id
+from mobiflow_agent.model.prompting import StepPolicyPromptBuilder
+from mobiflow_agent.model.runtime import ModelRuntime
 from mobiflow_agent.task.session import TaskSession
 
 StepPolicyCallback = Callable[[TaskSession], StepDecision]
 
 
 class StepPolicyAgent:
-    def __init__(self, *, step_policy: StepPolicyCallback | None = None):
+    def __init__(
+        self,
+        *,
+        model_client: ModelRuntime | None = None,
+        prompt_builder: StepPolicyPromptBuilder | None = None,
+        step_policy: StepPolicyCallback | None = None,
+    ):
+        self._model_client = model_client
+        self._prompt_builder = prompt_builder or StepPolicyPromptBuilder()
         self._step_policy = step_policy
 
-    def bind_model_runtime(self, model_client) -> None:
-        return None
+    def bind_model_runtime(self, model_client: ModelRuntime | None) -> None:
+        if model_client is not None:
+            self._model_client = model_client
 
     def decide(self, session: TaskSession, request: RoleRequest | None = None) -> tuple[StepDecision, RoleResult]:
         if request is not None and request.role != AgentRole.STEP_POLICY:
             raise ValueError("StepPolicyAgent received a non-step-policy RoleRequest.")
-        decision = self._step_policy(session) if self._step_policy is not None else self._default_decision(session)
+        before_trace_count = len(session.model_trace)
+        decision = self._build_decision(session)
+        trace_refs = [
+            trace.invocation_id for trace in session.model_trace[before_trace_count:]
+        ]
         result = RoleResult(
             result_id=build_role_result_id(),
             role=AgentRole.STEP_POLICY,
             session_id=session.session_id,
             step_id=session.current_step.step_id if session.current_step else None,
             summary=decision.summary,
-            payload={"step_decision": decision.model_dump(mode="python")},
+            payload={
+                "step_decision": decision.model_dump(mode="python"),
+                "model_trace_refs": trace_refs,
+            },
             handoff_reason=decision.decision_type.value,
             next_role=self._next_role(decision),
         )
         return decision, result
+
+    def _build_decision(self, session: TaskSession) -> StepDecision:
+        if self._step_policy is not None:
+            return self._step_policy(session)
+        model_decision = self._decide_with_model(session)
+        return model_decision or self._default_decision(session)
+
+    def _decide_with_model(self, session: TaskSession) -> StepDecision | None:
+        if self._model_client is None or session.active_model_profile is None:
+            return None
+        prompt = self._prompt_builder.build(session=session)
+        try:
+            generated = self._model_client.generate_structured(
+                role=AgentRole.STEP_POLICY,
+                prompt=prompt,
+                response_model=StepDecision,
+                profile_name=session.active_model_profile,
+                metadata={"session_id": session.session_id},
+            )
+        except Exception:
+            return None
+        session.model_trace.append(generated.response.trace)
+        return generated.output
 
     @staticmethod
     def _default_decision(session: TaskSession) -> StepDecision:

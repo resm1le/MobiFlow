@@ -7,8 +7,12 @@ from mobiflow_agent.evaluation.scenario import (
     ScenarioMemoryEvaluationService,
     approval_required_destructive_action_case,
     dynamic_approval_required_destructive_action_case,
+    dynamic_fixed_script_contrast_case,
     dynamic_login_success_case,
     dynamic_recovery_retry_success_case,
+    dynamic_slow_loading_recovery_success_case,
+    FixedScriptBaselineRunner,
+    FixedScriptStep,
     handoff_followup_case,
     login_success_case,
     memory_writeback_quality_rejects_unknown_case,
@@ -114,6 +118,35 @@ def test_dynamic_recovery_retry_scenario_completes_after_replan() -> None:
     assert result.final_response.status == TaskHarnessStatus.COMPLETED
     assert result.final_response.latest_verdict is not None
     assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_SUCCESS
+
+
+def test_dynamic_slow_loading_recovery_scenario_completes_after_replan() -> None:
+    result = ScenarioEvaluationService().run_case(dynamic_slow_loading_recovery_success_case())
+
+    assert result.matched is True
+    assert result.final_response.status == TaskHarnessStatus.COMPLETED
+    assert result.final_response.latest_verdict is not None
+    assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_SUCCESS
+
+
+def test_fixed_script_baseline_fails_where_dynamic_agent_handles_permission_dialog() -> None:
+    case = dynamic_fixed_script_contrast_case()
+    script_result = FixedScriptBaselineRunner().run(
+        case.platform_scenario,
+        [
+            FixedScriptStep(action_tool_name="mobile.launch", arguments={"app": "demo"}),
+            FixedScriptStep(action_tool_name="mobile.input_text", arguments={"node_id": "username", "text": "alice"}),
+            FixedScriptStep(action_tool_name="mobile.input_text", arguments={"node_id": "password", "text": "secret"}),
+            FixedScriptStep(action_tool_name="mobile.tap", arguments={"node_id": "login_button"}),
+        ],
+    )
+    agent_result = ScenarioEvaluationService().run_case(case)
+
+    assert script_result.completed is False
+    assert script_result.failed_step_index == 1
+    assert script_result.final_screen_id == "permission"
+    assert agent_result.matched is True
+    assert agent_result.final_response.status == TaskHarnessStatus.COMPLETED
 
 
 def test_handoff_followup_scenario_completes_after_heartbeat_tick() -> None:
