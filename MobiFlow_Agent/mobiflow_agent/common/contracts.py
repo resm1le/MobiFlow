@@ -183,6 +183,7 @@ class VerificationSpec(StrictModel):
     target_kind: EntityKind
     target_id: str = Field(min_length=1)
     success_checks: list[VerificationCheck] = Field(default_factory=list)
+    blocked_checks: list[VerificationCheck] = Field(default_factory=list)
     blocked_conditions: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -202,6 +203,7 @@ class VerificationVerdict(StrictModel):
     unmatched_check_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     blocked_reason: str | None = None
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_verdict(self) -> "VerificationVerdict":

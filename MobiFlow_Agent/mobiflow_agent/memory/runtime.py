@@ -115,6 +115,7 @@ class TaskMemoryRuntime:
             )
             self._writeback_results.append(result)
             return result
+        self._record_feedback_for_retrieved_memories(session)
         records = self._candidate_writeback_records(session)
         stored: list[TaskMemoryRecord] = []
         rejected: list[TaskMemoryRecord] = []
@@ -405,6 +406,7 @@ class TaskMemoryRuntime:
             content_payload=payload,
             created_at_ms=created_at_ms,
             updated_at_ms=created_at_ms,
+            confidence_score=self._memory_confidence(session),
         )
 
     def _ensure_embeddings(self, records: list[TaskMemoryRecord]) -> None:
@@ -480,10 +482,55 @@ class TaskMemoryRuntime:
             "kind": match.record.kind.value,
             "summary": match.record.summary,
             "score": round(match.score, 4),
+            "confidence_score": round(match.record.confidence_score, 4),
             "tags": match.record.tags,
             "blocked_reason": match.record.blocked_reason,
             "evidence_ref_ids": match.record.evidence_ref_ids[:5],
+            "matched_terms": list(match.matched_terms),
+            "applicability": match.record.content_payload.get("applicability", {})
+            if isinstance(match.record.content_payload, dict)
+            else {},
         }
+
+    def _record_feedback_for_retrieved_memories(self, session: TaskSession) -> None:
+        if session.last_verdict is None:
+            return
+        succeeded = session.last_verdict.status == VerificationStatus.VERIFIED_SUCCESS
+        seen: set[str] = set()
+        for context in self._retrieval_contexts:
+            for match in context.matches:
+                memory_id = match.record.memory_id
+                if memory_id in seen:
+                    continue
+                seen.add(memory_id)
+                record = self._store.get_record(memory_id)
+                if record is None:
+                    continue
+                feedback = dict(record.feedback)
+                success_count = int(feedback.get("success_count", 0) or 0)
+                failure_count = int(feedback.get("failure_count", 0) or 0)
+                if succeeded:
+                    success_count += 1
+                    confidence_score = min(1.0, record.confidence_score + 0.05)
+                else:
+                    failure_count += 1
+                    confidence_score = max(0.0, record.confidence_score - 0.15)
+                feedback.update(
+                    {
+                        "success_count": success_count,
+                        "failure_count": failure_count,
+                        "last_session_id": session.session_id,
+                        "last_outcome": session.last_verdict.status.value,
+                    }
+                )
+                updated = record.model_copy(
+                    update={
+                        "feedback": feedback,
+                        "confidence_score": confidence_score,
+                        "updated_at_ms": build_memory_timestamp_ms(),
+                    }
+                )
+                self._store.put_record(updated)
 
     def _top_k_for_role(self, role: AgentRole) -> int:
         if role == AgentRole.PLANNER:
@@ -553,6 +600,21 @@ class TaskMemoryRuntime:
             if applicability.get(key):
                 tags.append(str(applicability[key]))
         return TaskMemoryRuntime._normalized_tags(tags)
+
+    @staticmethod
+    def _memory_confidence(session: TaskSession) -> float:
+        if session.last_verdict is None:
+            return 0.4
+        score = 0.45
+        if session.last_verdict.status == VerificationStatus.VERIFIED_SUCCESS:
+            score += 0.3
+        elif session.last_verdict.status == VerificationStatus.BLOCKED:
+            score += 0.1
+        if session.last_verdict.evidence_refs:
+            score += 0.2
+        if session.recovery_outcome is not None:
+            score += 0.05
+        return max(0.0, min(1.0, score))
 
     @staticmethod
     def _applicability_payload(session: TaskSession) -> dict[str, Any]:

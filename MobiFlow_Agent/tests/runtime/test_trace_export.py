@@ -1,4 +1,9 @@
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal
+from mobiflow_agent.evaluation.scenario import dynamic_slow_loading_recovery_success_case
+from mobiflow_agent.graph import TaskGraphRuntime
+from mobiflow_agent.agents import ExecutorAgent, ObserverAgent
+from mobiflow_agent.control import TaskControlPolicy
+from mobiflow_agent.platform.simulation import SimulatedMobilePlatformAdapter
 from mobiflow_agent.runtime.trace_export import ExecutionTraceExporter
 from mobiflow_agent.task.plan import TaskPlan, TaskStep, TaskStepKind
 from mobiflow_agent.task.session import TaskSession
@@ -40,3 +45,34 @@ def test_execution_trace_exporter_outputs_json_and_markdown_without_sensitive_pa
     assert "secret" not in dumped
     assert "# Execution Trace: session-1" in markdown
     assert "Login plan." in markdown
+
+
+def test_execution_trace_exporter_includes_recovery_timeline_for_dynamic_case() -> None:
+    case = dynamic_slow_loading_recovery_success_case()
+    adapter = SimulatedMobilePlatformAdapter(case.platform_scenario, target_id=case.scenario_id)
+    runtime = TaskGraphRuntime(
+        observer_agent=ObserverAgent(adapter=adapter),
+        executor_agent=ExecutorAgent(adapter),
+        policy=TaskControlPolicy(allow_recovery=True),
+    )
+    request = case.requests[0]
+    session = runtime.run(
+        runtime.create_session(
+            request.goal,
+            target_kind=request.target_kind,
+            target_id=request.target_id,
+            proposal=request.proposal,
+            verification_spec=request.verification_spec,
+        )
+    )
+
+    trace = ExecutionTraceExporter().export_json(session, action_traces=adapter.action_traces)
+    markdown = ExecutionTraceExporter().export_markdown(session, action_traces=adapter.action_traces)
+    nodes = [item["node"] for item in trace["timeline"]]
+
+    assert "observe" in nodes
+    assert "decide_step" in nodes
+    assert "recover" in nodes
+    assert "verify" in nodes
+    assert "## Timeline" in markdown
+    assert "recover" in markdown

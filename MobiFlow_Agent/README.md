@@ -1,348 +1,128 @@
 # MobiFlow Agent
 
-- 当前状态：`in_progress`
-- 当前阶段：`阶段 8A`
-- 阶段 8A 状态：`in_progress`
-- 最近更新：`2026-04-23`
-- 当前测试基线：`396 passed`
+MobiFlow Agent is the task-first decision and orchestration layer of MobiFlow. It targets mobile workflows that cannot be handled reliably by a fixed script: permission dialogs, slow loading pages, wrong-page transitions, approval-required actions, and recoverable UI drift.
 
-## 项目定位
+## Current Status
 
-MobiFlow Agent 是一个面向移动执行场景的任务执行系统。
+- Main runtime: `TaskGraphRuntime`, backed by LangGraph.
+- Compatibility name: `TaskOrchestratorService`, graph-backed.
+- Current verified test baseline: `416 passed`.
+- Scope: Agent runtime, simulation, memory, evaluation, and traceability. Real-device execution remains outside this subproject.
 
-在 MobiFlow 大系统中，Agent 是最上层智能任务层：
+## Core Workflow
 
-- Agent 负责规划、观察编排、执行提案、验证、恢复、记忆和评测。
-- Platform 负责 canonical state、治理、审批、审计和协议。
-- Android Executor 负责终端侧执行、事件和产物回传。
+```text
+goal
+  -> plan
+  -> observe
+  -> decide_step
+  -> execute proposal
+  -> verify
+  -> recover / replan if needed
+  -> memory writeback
+  -> trace export
+```
 
-大系统文档入口见：[../docs/README.md](../docs/README.md)。
+`TaskSession` remains the authoritative business state. LangGraph state only carries orchestration control fields.
 
-核心执行链：
+## Recent Agent Enhancements
 
-- `goal -> plan -> observe -> execute -> verify`
-- `goal -> plan -> observe -> recover -> verify`
+- Model-driven `StepPolicyAgent` with bounded `StepDecision` output.
+- `StepPolicyDecisionValidator` for tool allowlist, target alignment, decision consistency, and evidence readiness.
+- Structured `VerificationPredicate` support for success checks.
+- Structured `blocked_checks` and verifier diagnostics for permission dialogs, wrong pages, loading screens, and other negative states.
+- Dynamic recovery scenarios, including slow-loading retry and fixed-script contrast.
+- Task memory applicability, confidence scoring, feedback, and retrieval explanations.
+- `ExecutionTraceExporter` with JSON, Markdown, redaction, and node-level timeline output.
+- Scenario regression suite grouped by normal, recovery, approval, fixed-script contrast, and memory capabilities.
 
-任务完成必须基于 evidence-based verification，而不是工具返回成功或自然语言总结。
-
-## 当前包结构
+## Package Responsibilities
 
 ```text
 mobiflow_agent/
-  __init__.py
-  common/
-  task/
-  control/
-  agents/
-  model/
-  execution/
-  memory/
-  evaluation/
-  runtime/
-  graph/
-  platform/
+  graph/        LangGraph runtime, nodes, routes, and graph support ops
+  agents/       planner, observer, step policy, executor, verifier, recovery
+  task/         TaskSession, TaskPlan, TaskStep, task status models
+  runtime/      harness, checkpointing, context compression, trace export
+  memory/       task memory records, retrieval, quality, governance, feedback
+  evaluation/   simulation scenarios, quality gates, regression suite
+  platform/     simulated mobile adapter and platform contracts
+  model/        provider-agnostic generation and embedding runtime
+  control/      dispatcher, policy, and compatibility imports
+  common/       canonical contracts and id helpers
 ```
 
-迁移后的包职责：
-
-- `graph/` 是 LangGraph 主编排层，承载 runtime、nodes、routes、checkpoint 接入和 graph support ops。
-- `control/` 只保留 dispatcher、policy 与 `TaskOrchestratorService` 兼容命名，不再承载主状态机。
-- `runtime/` 继续承载 harness、checkpointing、context handoff/compression 等运行支撑能力。
-
-## 包根公开入口
-
-`mobiflow_agent` 保留 task-first 主入口，并公开当前稳定的控制面、模型层、memory、上下文压缩、harness 与 simulation/scenario 入口：
-
-- `TaskOrchestratorService`
-- `TaskGraphRuntime`
-- `TaskGraphState`
-- `build_task_orchestration_graph`
-- `TaskSession`
-- `TaskPlan`
-- `TaskStep`
-- `TaskStepPolicy`
-- `TaskStatus`
-- `TaskCompletionVerdict`
-- `AgentRole`
-- `RoleRequest`
-- `RoleResult`
-- `StepDecision`
-- `StepDecisionType`
-- `StepPolicyAgent`
-- `ReplanDecision`
-- `ReplanDecisionType`
-- `RecoveryOutcome`
-- `PlannerAgent`
-- `ObserverAgent`
-- `ExecutorAgent`
-- `VerifierAgent`
-- `RecoveryAgent`
-- `ExecutionProposal`
-- `ObservationView`
-- `VerificationSpec`
-- `VerificationVerdict`
-- `EntityKind`
-- `ModelProfile`
-- `ModelSettings`
-- `EmbeddingProfile`
-- `RoleModelPolicy`
-- `ModelRegistry`
-- `ModelRegistryBuilder`
-- `ModelRuntime`
-- `ModelInvocationTrace`
-- `EmbeddingClient`
-- `EmbeddingRequest`
-- `EmbeddingResponse`
-- `OpenAICompatibleProviderConfig`
-- `TaskMemoryRecord`
-- `TaskMemoryRecordKind`
-- `TaskMemoryRecordStatus`
-- `TaskMemoryQuery`
-- `TaskMemoryMatch`
-- `TaskMemoryRetrievalResult`
-- `TaskMemoryPolicy`
-- `TaskMemoryGovernancePolicy`
-- `TaskMemoryGovernanceDecision`
-- `TaskMemoryGovernanceIssue`
-- `TaskMemoryGovernanceReport`
-- `TaskMemoryGovernanceService`
-- `TaskMemoryQualityPolicy`
-- `TaskMemoryQualityIssue`
-- `TaskMemoryQualityDecision`
-- `TaskMemoryQualityService`
-- `TaskMemoryContext`
-- `TaskMemoryRuntime`
-- `TaskMemoryLegacyImportService`
-- `TaskMemoryStore`
-- `InMemoryTaskMemoryStore`
-- `SqliteTaskMemoryStore`
-- `ContextCompressionPolicy`
-- `ContextCompressionResult`
-- `ContextCompressionService`
-- `ContextHandoff`
-- `TaskHarnessApprovalRequest`
-- `TaskHarnessRequest`
-- `TaskHarnessJob`
-- `TaskHarnessJobPolicy`
-- `TaskHarnessResponse`
-- `TaskHarnessService`
-- `TaskHarnessStatus`
-- `TaskHarnessStore`
-- `TaskHarnessError`
-- `TaskHarnessTransitionError`
-- `TaskHarnessStoreError`
-- `TaskHarnessSerializationError`
-- `TaskHeartbeatRunner`
-- `SessionContextDigest`
-- `StepContextSummary`
-- `SimulatedUiNode`
-- `SimulatedScreen`
-- `SimulatedTransition`
-- `SimulatedMobileScenario`
-- `SimulatedActionTrace`
-- `SimulatedMobilePlatformAdapter`
-- `ScenarioEvaluationCase`
-- `ScenarioExpectation`
-- `ScenarioEvaluationResult`
-- `ScenarioEvaluationReport`
-- `ScenarioQualityGate`
-- `ScenarioEvaluationService`
-- `ScenarioMemoryEvaluationService`
-- `ScenarioMemoryComparisonResult`
-- `ScenarioMemoryComparisonReport`
-- `PlannerPromptBuilder`
-- `RecoveryPromptBuilder`
-- `VerifierPromptBuilder`
-
-支撑能力继续从子包导入，例如：
-
-- `mobiflow_agent.execution.recovery.execution`
-- `mobiflow_agent.memory.case`
-- `mobiflow_agent.memory.evaluation`
-- `mobiflow_agent.runtime.state`
-- `mobiflow_agent.model.providers`
-
-## 最小调用面
+## Minimal Runtime Example
 
 ```python
-from mobiflow_agent import (
-    EntityKind,
-    ModelProfile,
-    ModelRegistryBuilder,
-    OpenAICompatibleProviderConfig,
-    RoleModelPolicy,
-    TaskGraphRuntime,
-    VerificationSpec,
-)
+from mobiflow_agent import EntityKind, TaskGraphRuntime, VerificationCheck, VerificationSpec
 
-builder = ModelRegistryBuilder(
-    profiles=[
-        ModelProfile(name="planner-profile", provider="openai-compatible", model="gpt-4o-mini"),
-        ModelProfile(name="verifier-profile", provider="openai-compatible", model="gpt-4o-mini"),
-    ],
-)
-builder.register_openai_compatible(OpenAICompatibleProviderConfig.from_env())
-registry = builder.build()
-
-runtime = TaskGraphRuntime(
-    model_registry=registry,
-    role_model_policy=RoleModelPolicy(
-        role_profiles={
-            "planner": "planner-profile",
-            "verifier": "verifier-profile",
-        }
-    ),
-)
+runtime = TaskGraphRuntime()
 
 session = runtime.create_session(
-    "Inspect blocked task",
-    target_kind=EntityKind.RUN,
-    target_id="run-123",
-    verification_spec=VerificationSpec(...),
+    "[dynamic] Login to the demo app using bounded mobile UI actions.",
+    target_kind=EntityKind.TASK,
+    target_id="dynamic_login_success",
+    verification_spec=VerificationSpec(
+        verification_id="verification:demo-login",
+        target_kind=EntityKind.TASK,
+        target_id="dynamic_login_success",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-screen-visible",
+                description="Home Screen is visible.",
+                evidence_hint="Home Screen",
+            )
+        ],
+    ),
 )
 
 session = runtime.run(session)
 ```
 
-`TaskOrchestratorService` 仍可导入，但它只是 graph-backed runtime 的兼容类名。新代码优先使用 `TaskGraphRuntime`。
-
-## Memory / RAG 调用面
+## Scenario Regression Suite
 
 ```python
-from mobiflow_agent import (
-    EmbeddingProfile,
-    ModelRegistryBuilder,
-    OpenAICompatibleProviderConfig,
-    SqliteTaskMemoryStore,
-    TaskMemoryGovernancePolicy,
-    TaskMemoryGovernanceService,
-    TaskMemoryPolicy,
-    TaskMemoryRuntime,
-    TaskGraphRuntime,
-)
+from mobiflow_agent import ScenarioRegressionSuiteRunner
 
-store = SqliteTaskMemoryStore("var/task-memory.sqlite3")
+report = ScenarioRegressionSuiteRunner().run_default_suite()
 
-builder = ModelRegistryBuilder(
-    embedding_profiles=[
-        EmbeddingProfile(
-            name="memory-embedding",
-            provider="openai-compatible",
-            model="text-embedding-3-small",
-        )
-    ]
-)
-builder.register_openai_compatible(OpenAICompatibleProviderConfig.from_env())
-registry = builder.build()
-
-memory_runtime = TaskMemoryRuntime(
-    store=store,
-    embedding_profile_name="memory-embedding",
-    policy=TaskMemoryPolicy(require_evidence_for_writeback=True),
-    governance_service=TaskMemoryGovernanceService(
-        policy=TaskMemoryGovernancePolicy(default_ttl_ms=30 * 24 * 60 * 60 * 1000)
-    ),
-)
-
-runtime = TaskGraphRuntime(
-    model_registry=registry,
-    memory_runtime=memory_runtime,
-)
+assert report.mismatched_cases == 0
 ```
 
-严格写回与 memory-on/off 场景对比：
+The default suite covers dynamic login, slow-loading recovery, retry recovery, approval-required actions, fixed-script contrast, and memory-related cases.
+
+## Trace Export
 
 ```python
-from mobiflow_agent import (
-    InMemoryTaskMemoryStore,
-    ScenarioMemoryEvaluationService,
-    TaskMemoryRuntime,
-)
-from mobiflow_agent.evaluation.scenario import memory_writeback_quality_rejects_unknown_case
+from mobiflow_agent import ExecutionTraceExporter
 
-comparison = ScenarioMemoryEvaluationService(
-    memory_runtime_factory=lambda: TaskMemoryRuntime(store=InMemoryTaskMemoryStore())
-).compare_case(memory_writeback_quality_rejects_unknown_case())
-
-assert comparison.quality_rejection_count >= 0
+markdown = ExecutionTraceExporter().export_markdown(session)
+json_payload = ExecutionTraceExporter().export_json(session)
 ```
 
-## Harness 调用面
+The exported trace includes plan, role requests/results, step decisions, action traces, verifier verdicts, recovery outcomes, memory writeback, model trace refs, and a node-level timeline. Sensitive fields such as prompts, tokens, secrets, passwords, and provider responses are redacted.
 
-```python
-from mobiflow_agent import (
-    EntityKind,
-    SqliteTaskHarnessStore,
-    TaskHarnessRequest,
-    TaskHarnessService,
-    TaskHeartbeatRunner,
-    TaskGraphRuntime,
-    VerificationSpec,
-)
+## Memory / RAG Boundary
 
-store = SqliteTaskHarnessStore("var/task-harness.sqlite3")
-runtime = TaskGraphRuntime(...)
-harness = TaskHarnessService(orchestrator=runtime, store=store)
+Task memory is not a raw log store. Records carry applicability context, confidence score, feedback, evidence refs, quality decisions, and governance state. Retrieval can combine deterministic matching and optional vector search, but the default local setup works without an external vector database.
 
-response = harness.start(
-    TaskHarnessRequest(
-        goal="Inspect blocked task",
-        target_kind=EntityKind.RUN,
-        target_id="run-123",
-        verification_spec=VerificationSpec(...),
-    )
-)
-
-responses = TaskHeartbeatRunner(harness).run_once()
-store.close()
-```
-
-## Scenario 调用面
-
-```python
-from mobiflow_agent import ScenarioEvaluationService
-from mobiflow_agent.evaluation.scenario import login_success_case
-
-result = ScenarioEvaluationService().run_case(login_success_case())
-
-assert result.matched is True
-assert result.final_response.status.value == "completed"
-```
-
-## 当前能力
-
-- 阶段 6 的 checkpoint-ready 控制面保持稳定
-- `model/` 是 provider-agnostic 的 generation + embedding 子系统
-- `memory/` 已升级为 task-first 记忆子系统，支持 record / store / retrieval / strict writeback / quality / governance / evaluation
-- `TaskGraphRuntime` 是 LangGraph 主编排层，并在 `planner / recovery / verifier` 前主动注入记忆上下文
-- `DYNAMIC` step 支持层级计划内的动态 step policy，允许 bounded observe/decide/execute loop
-- recovery 支持轻量 replan decision：retry、skip、handoff、fail
-- verify 收口后可自动写回高价值 task memory，且默认经过 quality gate 防污染
-- retrieval 默认只返回 `ACTIVE` 且未过期 memory，quarantined / expired / superseded 记录只用于治理审计
-- legacy recovery memory 可通过导入服务迁移为 task-first memory record
-- `runtime/context` 提供 step summary、session digest 与 cross-session `ContextHandoff`
-- `runtime/harness` 是 task-first harness 正式入口
-- `platform/simulation` 提供正式 simulated mobile runtime
-- `evaluation/scenario` 提供 canonical scenario fixtures、quality gate、聚合报告与 memory-on/off 对比
-
-## 当前边界
-
-- 不做物理多 Agent / team-chat
-- 不让模型直调工具
-- `memory` 可以在 verify 后自动沉淀高价值记忆，但不直接改写 proposal / execution 决策
-- `evaluation` 不直接主导 runtime
-- 不把 LangGraph 升级为 Platform / Android Executor 的系统总框架
-- heartbeat 只做到本地 / in-process 生产基线，不做分布式 worker claim、后台 daemon、Redis/Postgres queue
-- 当前不做真实设备、ADB、uiautomator、截图、logcat 或外部观察接入
-
-## 验证命令
-
-在 [MobiFlow_Agent](/D:/developing/MobiFlow/MobiFlow_Agent) 下执行：
+## Run Tests
 
 ```powershell
+cd MobiFlow_Agent
 python -m pytest -q
 ```
 
-当前结果：
+Current expected baseline:
 
-- `396 passed`
+```text
+416 passed
+```
+
+## Boundaries
+
+- No distributed worker, queue, or daemon in this subproject.
+- No real-device ADB loop in the Agent tests.
+- No direct model-to-tool execution. Model output must become structured decisions or proposals and pass system validation.
+- No claim of a general-purpose phone-control Agent. This is an execution-oriented Agent runtime prototype for bounded mobile experiment workflows.

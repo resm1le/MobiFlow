@@ -285,3 +285,189 @@ def test_verifier_agent_returns_unknown_when_structured_predicate_lacks_evidence
 
     assert verdict.status == VerificationStatus.VERIFIED_UNKNOWN
     assert verdict.unmatched_check_ids == ["home-screen-visible"]
+
+
+def test_verifier_agent_matches_structured_blocked_predicate_before_success() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:permission-dialog",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-screen-visible",
+                description="Home Screen is visible.",
+                evidence_hint="Home Screen",
+            )
+        ],
+        blocked_checks=[
+            VerificationCheck(
+                check_id="permission-dialog",
+                description="Permission dialog blocks progress.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_screen_snapshot",
+                        field_path="value.title",
+                        operator=VerificationPredicateOperator.EQUALS,
+                        expected="Permission Dialog",
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-permission",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "permission", "title": "Permission Dialog"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="permission-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Permission dialog is visible.",
+                        locator="permission",
+                    )
+                ],
+            )
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.BLOCKED
+    assert verdict.blocked_reason == "permission-dialog"
+    assert verdict.diagnostics["suspected_current_state"] == "Permission Dialog"
+    assert verdict.diagnostics["suggested_recovery_direction"] == "recover_or_handoff"
+
+
+def test_verifier_agent_wrong_page_does_not_succeed_from_target_keyword_alone() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:wrong-page",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-node-visible",
+                description="Home node is visible.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_ui_tree",
+                        field_path="value[].node_id",
+                        operator=VerificationPredicateOperator.ANY_EQUALS,
+                        expected="home_title",
+                    )
+                ],
+            )
+        ],
+        blocked_checks=[
+            VerificationCheck(
+                check_id="wrong-help-page",
+                description="Help page is not the target page.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_screen_snapshot",
+                        field_path="value.screen_id",
+                        operator=VerificationPredicateOperator.EQUALS,
+                        expected="help",
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-help",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "help", "title": "Help Screen", "note": "Home Screen docs"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="help-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Help page mentions Home Screen but is not home.",
+                        locator="help",
+                    )
+                ],
+            ),
+            ObservationFact(
+                fact_id="simulated_ui_tree",
+                source=ObservationFactSource.PLATFORM,
+                title="Tree",
+                value=[{"node_id": "help_title", "text": "Home Screen help article"}],
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="help-tree",
+                        kind=EvidenceKind.ARTIFACT,
+                        summary="Help tree.",
+                        locator="help",
+                    )
+                ],
+            ),
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.BLOCKED
+    assert verdict.blocked_reason == "wrong-help-page"
+    assert verdict.matched_check_ids == []
+
+
+def test_verifier_agent_loading_screen_returns_unknown_with_diagnostics() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:loading",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="home-screen-visible",
+                description="Home Screen is visible.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_screen_snapshot",
+                        field_path="value.title",
+                        operator=VerificationPredicateOperator.EQUALS,
+                        expected="Home Screen",
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-loading",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "loading", "title": "Loading Screen"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="loading-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Still loading.",
+                        locator="loading",
+                    )
+                ],
+            )
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.VERIFIED_UNKNOWN
+    assert verdict.diagnostics["suspected_current_state"] == "Loading Screen"
+    assert verdict.diagnostics["suggested_recovery_direction"] == "observe_or_recover"

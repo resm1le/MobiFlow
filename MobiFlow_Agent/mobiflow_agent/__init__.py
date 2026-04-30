@@ -16,6 +16,8 @@ from mobiflow_agent.agents import (
     StepDecision,
     StepDecisionType,
     StepPolicyAgent,
+    StepPolicyDecisionValidator,
+    StepPolicyValidationResult,
     VerifierAgent,
 )
 from mobiflow_agent.common import (
@@ -54,6 +56,11 @@ from mobiflow_agent.evaluation import (
     ScenarioMemoryComparisonResult,
     ScenarioMemoryEvaluationService,
     ScenarioQualityGate,
+    ScenarioRegressionCaseResult,
+    ScenarioRegressionCaseSpec,
+    ScenarioRegressionGroup,
+    ScenarioRegressionReport,
+    ScenarioRegressionSuiteRunner,
 )
 from mobiflow_agent.graph import TaskGraphRuntime, TaskGraphState, build_task_orchestration_graph
 from mobiflow_agent.model import (
@@ -183,6 +190,11 @@ __all__ = [
     "ScenarioMemoryComparisonResult",
     "ScenarioMemoryEvaluationService",
     "ScenarioQualityGate",
+    "ScenarioRegressionCaseResult",
+    "ScenarioRegressionCaseSpec",
+    "ScenarioRegressionGroup",
+    "ScenarioRegressionReport",
+    "ScenarioRegressionSuiteRunner",
     "SessionContextDigest",
     "SimulatedActionTrace",
     "SimulatedMobilePlatformAdapter",
@@ -196,6 +208,8 @@ __all__ = [
     "StepDecisionType",
     "StepPolicyPromptBuilder",
     "StepPolicyAgent",
+    "StepPolicyDecisionValidator",
+    "StepPolicyValidationResult",
     "SqliteTaskMemoryStore",
     "TaskAgentDispatcher",
     "TaskCompletionVerdict",

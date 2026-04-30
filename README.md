@@ -5,7 +5,7 @@ MobiFlow is an intelligent mobile experiment execution platform for complex, non
 This repository contains the three core parts of the system:
 
 - `MobiFlow_Agent`
-  Task planning, dynamic orchestration, governed execution, evidence-based verification, recovery, and task memory.
+  LangGraph-based Agent runtime for task planning, dynamic step policy, governed execution, structured verification, recovery, task memory, trace export, and scenario regression.
 - `AI_Mobile_Executor_Platform`
   Platform control plane, execution governance, APIs, operational workflows, and web console.
 - `AutoA11y_Executor`
@@ -16,7 +16,7 @@ This repository contains the three core parts of the system:
 MobiFlow is organized as a three-layer system:
 
 1. Agent decision layer
-   Responsible for goal understanding, task decomposition, dynamic step routing, verification, recovery, and memory-enhanced execution.
+   Responsible for goal understanding, task decomposition, dynamic step routing, bounded model decisions, structured verification, recovery, memory-enhanced execution, and traceable runtime evidence.
 2. Platform control plane
    Responsible for state management, governance, approval, auditing, API orchestration, and operator-facing tools.
 3. Android executor
@@ -35,4 +35,4 @@ MobiFlow/
 
 - Archived design drafts, migration notes, and intermediate working materials are intentionally excluded from this repository.
 - Each subproject keeps its own local documentation and build configuration.
-
+- The Agent subproject currently focuses on bounded mobile experiment workflows, simulated scenario regression, and execution traceability rather than large-scale real-device benchmarking.

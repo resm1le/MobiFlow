@@ -200,6 +200,25 @@ class VerifierAgent:
                 ],
             )
         if spec is not None:
+            blocked_check = self._match_blocked_check(spec.blocked_checks, observation)
+            if blocked_check is not None:
+                return VerificationVerdict(
+                    verdict_id=f"task-verdict:{session.session_id}:blocked",
+                    status=VerificationStatus.BLOCKED,
+                    summary=f"Verifier identified blocked check: {blocked_check.description}.",
+                    target_kind=target_kind,
+                    target_id=target_id,
+                    unmatched_check_ids=[check.check_id for check in spec.success_checks],
+                    evidence_refs=evidence_refs,
+                    blocked_reason=blocked_check.check_id,
+                    diagnostics=self._diagnostics(
+                        observation=observation,
+                        matched_check_ids=[],
+                        unmatched_check_ids=[check.check_id for check in spec.success_checks],
+                        blocked_reason=blocked_check.check_id,
+                        missing_evidence=False,
+                    ),
+                )
             blocked_reason = self._match_blocked_reason(spec.blocked_conditions, searchable_text)
             if blocked_reason is not None:
                 return VerificationVerdict(
@@ -211,6 +230,13 @@ class VerifierAgent:
                     unmatched_check_ids=[check.check_id for check in spec.success_checks],
                     evidence_refs=evidence_refs,
                     blocked_reason=blocked_reason,
+                    diagnostics=self._diagnostics(
+                        observation=observation,
+                        matched_check_ids=[],
+                        unmatched_check_ids=[check.check_id for check in spec.success_checks],
+                        blocked_reason=blocked_reason,
+                        missing_evidence=False,
+                    ),
                 )
             matched_check_ids = [
                 check.check_id
@@ -234,6 +260,13 @@ class VerifierAgent:
                     target_id=target_id,
                     matched_check_ids=matched_check_ids,
                     evidence_refs=evidence_refs,
+                    diagnostics=self._diagnostics(
+                        observation=observation,
+                        matched_check_ids=matched_check_ids,
+                        unmatched_check_ids=[],
+                        blocked_reason=None,
+                        missing_evidence=False,
+                    ),
                 )
             return VerificationVerdict(
                 verdict_id=f"task-verdict:{session.session_id}:unknown",
@@ -252,6 +285,13 @@ class VerifierAgent:
                         locator=session.session_id,
                     )
                 ],
+                diagnostics=self._diagnostics(
+                    observation=observation,
+                    matched_check_ids=matched_check_ids,
+                    unmatched_check_ids=unmatched_check_ids,
+                    blocked_reason=None,
+                    missing_evidence=not bool(evidence_refs),
+                ),
             )
         if evidence_refs:
             return VerificationVerdict(
@@ -262,6 +302,13 @@ class VerifierAgent:
                 target_id=target_id,
                 matched_check_ids=["has-evidence"],
                 evidence_refs=evidence_refs,
+                diagnostics=self._diagnostics(
+                    observation=observation,
+                    matched_check_ids=["has-evidence"],
+                    unmatched_check_ids=[],
+                    blocked_reason=None,
+                    missing_evidence=False,
+                ),
             )
         return VerificationVerdict(
             verdict_id=f"task-verdict:{session.session_id}:unknown",
@@ -278,6 +325,13 @@ class VerifierAgent:
                     locator=session.session_id,
                 )
             ],
+            diagnostics=self._diagnostics(
+                observation=observation,
+                matched_check_ids=[],
+                unmatched_check_ids=["has-evidence"],
+                blocked_reason=None,
+                missing_evidence=True,
+            ),
         )
 
     @staticmethod
@@ -299,6 +353,24 @@ class VerifierAgent:
         for blocked_condition in blocked_conditions:
             if blocked_condition.casefold() in searchable_text:
                 return blocked_condition
+        return None
+
+    @staticmethod
+    def _match_blocked_check(
+        blocked_checks: list[VerificationCheck],
+        observation: ObservationView | None,
+    ) -> VerificationCheck | None:
+        if observation is None:
+            return None
+        searchable_text = VerifierAgent._build_searchable_text(observation)
+        for check in blocked_checks:
+            if VerifierAgent._matches_verification_check(
+                check=check,
+                observation=observation,
+                searchable_text=searchable_text,
+                has_evidence=True,
+            ):
+                return check
         return None
 
     @staticmethod
@@ -416,6 +488,35 @@ class VerifierAgent:
         if isinstance(value, str) and not case_sensitive:
             return value.casefold()
         return value
+
+    @staticmethod
+    def _diagnostics(
+        *,
+        observation: ObservationView | None,
+        matched_check_ids: list[str],
+        unmatched_check_ids: list[str],
+        blocked_reason: str | None,
+        missing_evidence: bool,
+    ) -> dict:
+        suspected_state = None
+        if observation is not None:
+            for fact in observation.facts:
+                if fact.fact_id == "simulated_screen_snapshot" and isinstance(fact.value, dict):
+                    suspected_state = fact.value.get("title") or fact.value.get("screen_id")
+                    break
+        suggested = "continue_verification"
+        if blocked_reason is not None:
+            suggested = "recover_or_handoff"
+        elif missing_evidence or unmatched_check_ids:
+            suggested = "observe_or_recover"
+        return {
+            "suspected_current_state": suspected_state,
+            "matched_check_ids": matched_check_ids,
+            "unmatched_check_ids": unmatched_check_ids,
+            "blocked_reason": blocked_reason,
+            "missing_evidence": missing_evidence,
+            "suggested_recovery_direction": suggested,
+        }
 
     @staticmethod
     def _candidate_matches(candidate: str, searchable_text: str) -> bool:

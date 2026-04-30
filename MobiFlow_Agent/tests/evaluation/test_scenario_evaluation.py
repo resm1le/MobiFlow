@@ -5,6 +5,8 @@ from mobiflow_agent.evaluation.scenario import (
     ScenarioEvaluationReport,
     ScenarioEvaluationService,
     ScenarioMemoryEvaluationService,
+    ScenarioRegressionGroup,
+    ScenarioRegressionSuiteRunner,
     approval_required_destructive_action_case,
     dynamic_approval_required_destructive_action_case,
     dynamic_fixed_script_contrast_case,
@@ -167,6 +169,24 @@ def test_scenario_report_summarizes_multiple_cases() -> None:
     assert report.total_cases == 2
     assert report.matched_cases == 2
     assert report.mismatched_cases == 0
+
+
+def test_scenario_regression_suite_runs_grouped_capability_report() -> None:
+    report = ScenarioRegressionSuiteRunner(
+        memory_runtime_factory=lambda: TaskMemoryRuntime(store=InMemoryTaskMemoryStore())
+    ).run_default_suite()
+
+    assert report.total_cases >= 10
+    assert report.matched_cases == report.total_cases
+    groups = {result.group for result in report.results}
+    assert ScenarioRegressionGroup.NORMAL in groups
+    assert ScenarioRegressionGroup.RECOVERY in groups
+    assert ScenarioRegressionGroup.APPROVAL in groups
+    assert ScenarioRegressionGroup.FIXED_SCRIPT_CONTRAST in groups
+    assert ScenarioRegressionGroup.MEMORY in groups
+    contrast = next(result for result in report.results if result.group == ScenarioRegressionGroup.FIXED_SCRIPT_CONTRAST)
+    assert contrast.fixed_script_baseline is not None
+    assert contrast.fixed_script_baseline.completed is False
 
 
 def test_scenario_memory_comparison_reports_hits_writeback_and_quality_rejections() -> None:

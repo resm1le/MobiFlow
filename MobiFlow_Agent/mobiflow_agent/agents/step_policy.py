@@ -8,6 +8,7 @@ from mobiflow_agent.common.ids import build_role_result_id
 from mobiflow_agent.model.prompting import StepPolicyPromptBuilder
 from mobiflow_agent.model.runtime import ModelRuntime
 from mobiflow_agent.task.session import TaskSession
+from mobiflow_agent.agents.step_policy_validation import StepPolicyDecisionValidator
 
 StepPolicyCallback = Callable[[TaskSession], StepDecision]
 
@@ -18,10 +19,12 @@ class StepPolicyAgent:
         *,
         model_client: ModelRuntime | None = None,
         prompt_builder: StepPolicyPromptBuilder | None = None,
+        decision_validator: StepPolicyDecisionValidator | None = None,
         step_policy: StepPolicyCallback | None = None,
     ):
         self._model_client = model_client
         self._prompt_builder = prompt_builder or StepPolicyPromptBuilder()
+        self._decision_validator = decision_validator or StepPolicyDecisionValidator()
         self._step_policy = step_policy
 
     def bind_model_runtime(self, model_client: ModelRuntime | None) -> None:
@@ -55,7 +58,22 @@ class StepPolicyAgent:
         if self._step_policy is not None:
             return self._step_policy(session)
         model_decision = self._decide_with_model(session)
-        return model_decision or self._default_decision(session)
+        if model_decision is None:
+            return self._default_decision(session)
+        validation = self._decision_validator.validate(session, model_decision)
+        if validation.accepted:
+            return model_decision
+        fallback = self._default_decision(session)
+        if fallback.decision_type == StepDecisionType.OBSERVE_AGAIN:
+            return fallback.model_copy(
+                update={
+                    "summary": (
+                        "Model step policy decision was rejected "
+                        f"({', '.join(validation.issues)}); observing again."
+                    )
+                }
+            )
+        return fallback
 
     def _decide_with_model(self, session: TaskSession) -> StepDecision | None:
         if self._model_client is None or session.active_model_profile is None:
@@ -116,8 +134,15 @@ class StepPolicyAgent:
         if observation is None or spec is None:
             return False
         searchable_text = StepPolicyAgent._searchable_text(observation)
+        from mobiflow_agent.agents.verifier import VerifierAgent
+
         return all(
-            StepPolicyAgent._candidate_matches(check.evidence_hint or check.description or check.check_id, searchable_text)
+            VerifierAgent._matches_verification_check(
+                check=check,
+                observation=observation,
+                searchable_text=searchable_text,
+                has_evidence=any(fact.evidence_refs for fact in observation.facts),
+            )
             for check in spec.success_checks
             if check.required
         )

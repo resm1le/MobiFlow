@@ -29,6 +29,13 @@ from mobiflow_agent.evaluation.scenario.models import (
 )
 from mobiflow_agent.evaluation.scenario.quality_gate import ScenarioQualityGate
 from mobiflow_agent.evaluation.scenario.service import ScenarioEvaluationService, ScenarioMemoryEvaluationService
+from mobiflow_agent.evaluation.scenario.suite import (
+    ScenarioRegressionCaseResult,
+    ScenarioRegressionCaseSpec,
+    ScenarioRegressionGroup,
+    ScenarioRegressionReport,
+    ScenarioRegressionSuiteRunner,
+)
 
 __all__ = [
     "ScenarioEvaluationCase",
@@ -41,6 +48,11 @@ __all__ = [
     "ScenarioMemoryComparisonResult",
     "ScenarioMemoryEvaluationService",
     "ScenarioQualityGate",
+    "ScenarioRegressionCaseResult",
+    "ScenarioRegressionCaseSpec",
+    "ScenarioRegressionGroup",
+    "ScenarioRegressionReport",
+    "ScenarioRegressionSuiteRunner",
     "FixedScriptBaselineResult",
     "FixedScriptBaselineRunner",
     "FixedScriptStep",

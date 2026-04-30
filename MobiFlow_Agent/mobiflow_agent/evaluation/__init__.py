@@ -14,6 +14,11 @@ from mobiflow_agent.evaluation.scenario import (
     ScenarioMemoryComparisonResult,
     ScenarioMemoryEvaluationService,
     ScenarioQualityGate,
+    ScenarioRegressionCaseResult,
+    ScenarioRegressionCaseSpec,
+    ScenarioRegressionGroup,
+    ScenarioRegressionReport,
+    ScenarioRegressionSuiteRunner,
 )
 
 __all__ = [
@@ -30,4 +35,9 @@ __all__ = [
     "ScenarioMemoryComparisonResult",
     "ScenarioMemoryEvaluationService",
     "ScenarioQualityGate",
+    "ScenarioRegressionCaseResult",
+    "ScenarioRegressionCaseSpec",
+    "ScenarioRegressionGroup",
+    "ScenarioRegressionReport",
+    "ScenarioRegressionSuiteRunner",
 ]

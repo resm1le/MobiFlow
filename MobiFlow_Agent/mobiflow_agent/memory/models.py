@@ -58,6 +58,8 @@ class TaskMemoryRecord(StrictModel):
     access_count: int = Field(default=0, ge=0)
     quality_decision: str | None = None
     governance_tags: list[str] = Field(default_factory=list)
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    feedback: dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskMemoryQuery(StrictModel):

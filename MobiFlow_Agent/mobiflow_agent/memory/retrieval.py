@@ -202,6 +202,14 @@ class TaskMemoryRetrievalService:
         if applicability_matches:
             matched_terms.extend(applicability_matches)
             score += len(applicability_matches) * 0.2
+        score += record.confidence_score * 0.1
+        feedback = record.feedback if isinstance(record.feedback, dict) else {}
+        failures = int(feedback.get("failure_count", 0) or 0)
+        successes = int(feedback.get("success_count", 0) or 0)
+        if successes:
+            score += min(successes, 5) * 0.03
+        if failures:
+            score -= min(failures, 5) * 0.08
         return matched_terms, score
 
     @staticmethod

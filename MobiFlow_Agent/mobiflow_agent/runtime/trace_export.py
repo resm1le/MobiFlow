@@ -30,39 +30,40 @@ class ExecutionTraceExporter:
                 session.completion_verdict.value if session.completion_verdict is not None else None
             ),
             "status_history": [status.value for status in session.status_history],
-            "plan": None if session.plan is None else self._redact(session.plan.model_dump(mode="python")),
+            "plan": None if session.plan is None else self._redact(session.plan.model_dump(mode="json")),
             "current_step": None
             if session.current_step is None
-            else self._redact(session.current_step.model_dump(mode="python")),
+            else self._redact(session.current_step.model_dump(mode="json")),
             "step_decisions": [
-                self._redact(decision.model_dump(mode="python")) for decision in session.step_decisions
+                self._redact(decision.model_dump(mode="json")) for decision in session.step_decisions
             ],
             "role_requests": [
-                self._redact(request.model_dump(mode="python")) for request in session.role_requests
+                self._redact(request.model_dump(mode="json")) for request in session.role_requests
             ],
             "role_results": [
-                self._redact(result.model_dump(mode="python")) for result in session.role_results
+                self._redact(result.model_dump(mode="json")) for result in session.role_results
             ],
             "last_observation": None
             if session.last_observation is None
-            else self._redact(session.last_observation.model_dump(mode="python")),
+            else self._redact(session.last_observation.model_dump(mode="json")),
             "last_execution_result": None
             if session.last_execution_result is None
-            else self._redact(session.last_execution_result.model_dump(mode="python")),
+            else self._redact(session.last_execution_result.model_dump(mode="json")),
             "pending_execution": None
             if session.pending_execution is None
-            else self._redact(session.pending_execution.model_dump(mode="python")),
-            "last_verdict": None if session.last_verdict is None else self._redact(session.last_verdict.model_dump(mode="python")),
+            else self._redact(session.pending_execution.model_dump(mode="json")),
+            "last_verdict": None if session.last_verdict is None else self._redact(session.last_verdict.model_dump(mode="json")),
             "recovery_outcome": None
             if session.recovery_outcome is None
-            else self._redact(session.recovery_outcome.model_dump(mode="python")),
+            else self._redact(session.recovery_outcome.model_dump(mode="json")),
             "memory_context_keys": sorted(session.memory_context),
             "memory_writeback": self._redact(session.memory_context.get("memory_writeback:last")),
             "model_trace": [
-                self._redact(trace.model_dump(mode="python")) for trace in session.model_trace
+                self._redact(trace.model_dump(mode="json")) for trace in session.model_trace
             ],
             "action_traces": [self._redact(self._dump_model(trace)) for trace in action_traces or []],
         }
+        payload["timeline"] = self._build_timeline(payload)
         return self._redact(payload)
 
     def export_markdown(self, session: TaskSession, *, action_traces: list[Any] | None = None) -> str:
@@ -99,6 +100,14 @@ class ExecutionTraceExporter:
         lines.append(f"- Role results: {len(trace['role_results'])}")
         lines.append(f"- Model traces: {len(trace['model_trace'])}")
         lines.append(f"- Action traces: {len(trace['action_traces'])}")
+        lines.extend(["", "## Timeline"])
+        for item in trace.get("timeline", []):
+            lines.append(
+                f"- {item.get('sequence')}. {item.get('node')} "
+                f"[{item.get('status') or 'n/a'}]: {item.get('summary')}"
+            )
+            if item.get("route"):
+                lines.append(f"  route: {item['route']}")
         return "\n".join(lines)
 
     def dumps_json(self, session: TaskSession, *, action_traces: list[Any] | None = None) -> str:
@@ -121,8 +130,86 @@ class ExecutionTraceExporter:
     @staticmethod
     def _dump_model(value: Any) -> Any:
         if hasattr(value, "model_dump"):
-            return value.model_dump(mode="python")
+            return value.model_dump(mode="json")
         return value
+
+    @staticmethod
+    def _build_timeline(trace: dict[str, Any]) -> list[dict[str, Any]]:
+        timeline: list[dict[str, Any]] = []
+        status_history = trace.get("status_history", [])
+        for index, status in enumerate(status_history):
+            timeline.append(
+                {
+                    "sequence": len(timeline) + 1,
+                    "node": "status_transition",
+                    "role": None,
+                    "step_id": None,
+                    "status": status,
+                    "summary": f"Session entered {status}.",
+                    "route": status_history[index + 1] if index + 1 < len(status_history) else None,
+                    "evidence_refs": [],
+                    "model_trace_refs": [],
+                    "action_trace_refs": [],
+                }
+            )
+        action_traces = trace.get("action_traces", [])
+        action_by_proposal = {
+            item.get("proposal_id"): item
+            for item in action_traces
+            if isinstance(item, dict) and item.get("proposal_id")
+        }
+        for result in trace.get("role_results", []):
+            payload = result.get("payload") if isinstance(result.get("payload"), dict) else {}
+            verdict = payload.get("verdict") if isinstance(payload.get("verdict"), dict) else None
+            decision = payload.get("step_decision") if isinstance(payload.get("step_decision"), dict) else None
+            execution = payload.get("execution_result") if isinstance(payload.get("execution_result"), dict) else None
+            node = ExecutionTraceExporter._node_for_role(result.get("role"), decision, verdict, execution)
+            evidence_refs = []
+            if verdict is not None:
+                evidence_refs = [
+                    ref.get("evidence_id")
+                    for ref in verdict.get("evidence_refs", [])
+                    if isinstance(ref, dict) and ref.get("evidence_id")
+                ]
+            action_refs = []
+            proposal_id = None
+            if decision is not None and isinstance(decision.get("proposal"), dict):
+                proposal_id = decision["proposal"].get("proposal_id")
+            if execution is not None:
+                proposal_id = execution.get("proposal_id") or proposal_id
+            if proposal_id in action_by_proposal:
+                action_refs.append(action_by_proposal[proposal_id].get("audit_id"))
+            timeline.append(
+                {
+                    "sequence": len(timeline) + 1,
+                    "node": node,
+                    "role": result.get("role"),
+                    "step_id": result.get("step_id"),
+                    "status": verdict.get("status") if verdict is not None else None,
+                    "summary": result.get("summary"),
+                    "route": result.get("next_role") or result.get("handoff_reason"),
+                    "evidence_refs": evidence_refs,
+                    "model_trace_refs": payload.get("model_trace_refs", []),
+                    "action_trace_refs": [ref for ref in action_refs if ref],
+                }
+            )
+        return timeline
+
+    @staticmethod
+    def _node_for_role(role: str | None, decision: dict | None, verdict: dict | None, execution: dict | None) -> str:
+        if role == "planner":
+            return "ensure_plan"
+        if role == "observer":
+            return "observe"
+        if role == "step_policy":
+            return "decide_step"
+        if role == "executor":
+            return "dynamic_execute" if execution is not None else "execute"
+        if role == "verifier":
+            return "verify_recovery" if verdict and verdict.get("matched_check_ids") == ["recovery-effective"] else "verify"
+        if role == "recovery":
+            return "recover"
+        return role or "unknown"
 
 
 __all__ = ["ExecutionTraceExporter"]
