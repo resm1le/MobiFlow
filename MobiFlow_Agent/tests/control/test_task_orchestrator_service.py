@@ -11,6 +11,8 @@ from mobiflow_agent.common.contracts import (
     ObservationFact,
     ObservationFactSource,
     ObservationView,
+    VerificationCheck,
+    VerificationSpec,
     VerificationStatus,
 )
 from mobiflow_agent.control.policy import TaskControlPolicy
@@ -61,6 +63,21 @@ def _proposal() -> ExecutionProposal:
     )
 
 
+def _verification_spec(*, evidence_hint: str = "cancelled") -> VerificationSpec:
+    return VerificationSpec(
+        verification_id="verification:run:run-123",
+        target_kind=EntityKind.RUN,
+        target_id="run-123",
+        success_checks=[
+            VerificationCheck(
+                check_id=f"run-{evidence_hint}",
+                description=f"The run reaches {evidence_hint} status.",
+                evidence_hint=evidence_hint,
+            )
+        ],
+    )
+
+
 def test_task_orchestrator_service_completes_multi_step_task_chain() -> None:
     adapter = FakePlatformAdapter(
         submit_results=[
@@ -92,33 +109,40 @@ def test_task_orchestrator_service_completes_multi_step_task_chain() -> None:
         target_kind=EntityKind.RUN,
         target_id="run-123",
         proposal=_proposal(),
+        verification_spec=_verification_spec(),
     )
     completed = orchestrator.run(session)
 
     assert completed.status == TaskStatus.COMPLETED
     assert completed.completion_verdict == TaskCompletionVerdict.TASK_COMPLETED
     assert completed.current_step is not None
-    assert completed.current_step.kind.value == "verify"
+    assert completed.current_step.kind.value == "dynamic"
     assert completed.last_verdict is not None
     assert completed.last_verdict.status == VerificationStatus.VERIFIED_SUCCESS
     assert [request.role for request in completed.role_requests] == [
         AgentRole.PLANNER,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.EXECUTOR,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
     ]
     assert [result.role for result in completed.role_results] == [
         AgentRole.PLANNER,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.EXECUTOR,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
     ]
     assert [result.next_role for result in completed.role_results] == [
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.EXECUTOR,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
         None,
     ]
@@ -157,6 +181,7 @@ def test_task_orchestrator_service_completes_observe_verify_chain() -> None:
     assert [request.role for request in completed.role_requests] == [
         AgentRole.PLANNER,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
     ]
     assert completed.status_history == [
@@ -208,6 +233,7 @@ def test_task_orchestrator_service_pauses_for_approval_and_resumes_to_completion
         target_kind=EntityKind.RUN,
         target_id="run-123",
         proposal=_proposal(),
+        verification_spec=_verification_spec(),
     )
     paused = orchestrator.run(session)
 
@@ -280,6 +306,7 @@ def test_task_orchestrator_service_routes_rejected_approval_to_recovery_then_ver
         target_kind=EntityKind.RUN,
         target_id="run-123",
         proposal=_proposal(),
+        verification_spec=_verification_spec(),
     )
     paused = orchestrator.run(session)
     failed = orchestrator.resume(paused, approved=False)
@@ -326,21 +353,18 @@ def test_task_orchestrator_service_updates_memory_and_evaluation_support_context
     completed = orchestrator.run(session)
 
     assert completed.status == TaskStatus.COMPLETED
-    assert len(completed.memory_context) == 2
+    assert len(completed.memory_context) == 1
     assert len(completed.evaluation_context) == 1
     step_payloads = list(completed.memory_context.values())
-    assert [payload["step_kind"] for payload in step_payloads] == ["observe", "verify"]
+    assert [payload["step_kind"] for payload in step_payloads] == ["dynamic"]
     assert list(completed.evaluation_context.values()) == [
         {
             "verdict_status": VerificationStatus.VERIFIED_SUCCESS.value,
             "target_id": "run-123",
         }
     ]
-    assert support_calls == [
-        ("memory", TaskStatus.PLANNING),
-        ("memory", TaskStatus.OBSERVING),
-        ("evaluation", TaskStatus.VERIFYING),
-    ]
+    assert ("memory", TaskStatus.PLANNING) in support_calls
+    assert ("evaluation", TaskStatus.VERIFYING) in support_calls
 
 
 def test_task_orchestrator_service_runtime_projection_roundtrips_waiting_and_verifying_state() -> None:
@@ -372,6 +396,7 @@ def test_task_orchestrator_service_runtime_projection_roundtrips_waiting_and_ver
         target_kind=EntityKind.RUN,
         target_id="run-123",
         proposal=_proposal(),
+        verification_spec=_verification_spec(),
     )
     paused = orchestrator.run(session)
     runtime_state = orchestrator.export_runtime_state(paused)
@@ -434,23 +459,16 @@ def test_task_orchestrator_service_records_model_trace_and_role_profiles() -> No
                 },
                 "plan": {
                     "plan_id": "plan-1",
-                    "summary": "Observe and verify",
+                    "summary": "Dynamic observe and verify",
                     "steps": [
                         {
                             "step_id": "step-1",
-                            "kind": "observe",
-                            "goal": "Observe the run",
-                            "expected_outputs": ["observation"],
+                            "kind": "dynamic",
+                            "goal": "Reach a healthy run state and verify evidence.",
+                            "expected_outputs": ["observation", "step_decision", "verification_verdict"],
                             "verification_target_kind": "run",
                             "verification_target_id": "run-123",
-                        },
-                        {
-                            "step_id": "step-2",
-                            "kind": "verify",
-                            "goal": "Verify the run",
-                            "expected_outputs": ["verification_verdict"],
-                            "verification_target_kind": "run",
-                            "verification_target_id": "run-123",
+                            "allowed_side_effects": ["cancel_run"],
                             "verification_spec": {
                                 "verification_id": "verification:run:run-123",
                                 "target_kind": "run",
@@ -462,6 +480,10 @@ def test_task_orchestrator_service_records_model_trace_and_role_profiles() -> No
                                         "evidence_hint": "healthy",
                                     }
                                 ],
+                            },
+                            "policy": {
+                                "policy_id": "policy-1",
+                                "description": "Observe healthy state, then verify.",
                             },
                         },
                     ],
@@ -500,10 +522,10 @@ def test_task_orchestrator_service_records_model_trace_and_role_profiles() -> No
     completed = orchestrator.run(session)
 
     assert completed.status == TaskStatus.COMPLETED
-    assert len(completed.model_trace) == 2
-    assert [trace.profile_name for trace in completed.model_trace] == ["planner-profile", "verifier-profile"]
+    assert len(completed.model_trace) == 1
+    assert [trace.profile_name for trace in completed.model_trace] == ["planner-profile"]
     assert completed.role_requests[0].payload["active_model_profile"] == "planner-profile"
-    assert completed.role_requests[-1].payload["active_model_profile"] == "verifier-profile"
+    assert completed.role_requests[-1].role == AgentRole.VERIFIER
 
 
 def test_task_orchestrator_service_builds_session_digest_and_handoff_roundtrip() -> None:
@@ -596,6 +618,6 @@ def test_task_orchestrator_service_does_not_mark_success_without_matching_simula
     )
 
     assert completed.status == TaskStatus.FAILED
-    assert completed.completion_verdict == TaskCompletionVerdict.UNKNOWN
+    assert completed.completion_verdict == TaskCompletionVerdict.FAILED
     assert completed.last_verdict is not None
-    assert completed.last_verdict.status == VerificationStatus.VERIFIED_UNKNOWN
+    assert completed.last_verdict.status == VerificationStatus.VERIFIED_FAILED

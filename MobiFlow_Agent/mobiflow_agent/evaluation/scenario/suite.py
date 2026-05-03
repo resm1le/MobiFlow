@@ -21,7 +21,6 @@ from mobiflow_agent.evaluation.scenario.fixtures import (
     dynamic_login_success_case,
     dynamic_recovery_retry_success_case,
     dynamic_slow_loading_recovery_success_case,
-    login_success_case,
     memory_blocks_wrong_success_case,
     memory_guided_recovery_success_case,
     memory_writeback_quality_rejects_unknown_case,
@@ -85,11 +84,6 @@ class ScenarioRegressionSuiteRunner:
 
     def default_suite(self) -> list[ScenarioRegressionCaseSpec]:
         return [
-            ScenarioRegressionCaseSpec(
-                group=ScenarioRegressionGroup.NORMAL,
-                capability="static_success_path",
-                case=login_success_case(),
-            ),
             ScenarioRegressionCaseSpec(
                 group=ScenarioRegressionGroup.NORMAL,
                 capability="dynamic_login_path",

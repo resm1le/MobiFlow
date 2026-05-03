@@ -4,10 +4,8 @@ from .state import TaskGraphState
 
 
 _STEP_ROUTES = {
-    "observe",
     "dynamic_observe",
     "decide_step",
-    "execute",
     "dynamic_execute",
     "verify",
     "recover",
@@ -29,10 +27,6 @@ def route_after_decide_step(state: TaskGraphState) -> str:
 
 
 def route_after_dynamic_execute(state: TaskGraphState) -> str:
-    return _normalize_route(state.route_hint)
-
-
-def route_after_execute(state: TaskGraphState) -> str:
     return _normalize_route(state.route_hint)
 
 
@@ -70,7 +64,6 @@ __all__ = [
     "route_after_ensure_plan",
     "route_after_decide_step",
     "route_after_dynamic_execute",
-    "route_after_execute",
     "route_after_recover",
     "route_after_recovery_verify",
     "route_after_resume",

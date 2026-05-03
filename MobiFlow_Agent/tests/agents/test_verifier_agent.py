@@ -16,19 +16,23 @@ from mobiflow_agent.common.contracts import (
 )
 from mobiflow_agent.model import ModelProfile, ModelRegistry, ModelRuntime, RoleModelPolicy
 from mobiflow_agent.model.providers import NoopModelClient
-from mobiflow_agent.task.plan import TaskPlan, TaskStep, TaskStepKind
+from mobiflow_agent.task.plan import TaskPlan, TaskStep, TaskStepKind, TaskStepPolicy
 from mobiflow_agent.task.session import TaskSession
 
 
 def _session_with_verification_spec(spec: VerificationSpec) -> TaskSession:
     step = TaskStep(
         step_id="step-1",
-        kind=TaskStepKind.VERIFY,
-        goal="Verify the run outcome",
+        kind=TaskStepKind.DYNAMIC,
+        goal="Reach and verify the run outcome",
         expected_outputs=["verification_verdict"],
         verification_target_kind=spec.target_kind,
         verification_target_id=spec.target_id,
         verification_spec=spec,
+        policy=TaskStepPolicy(
+            policy_id="policy-1",
+            description="Dynamic verifier test policy.",
+        ),
     )
     return TaskSession(
         session_id="task-session-1",

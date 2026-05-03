@@ -6,24 +6,25 @@ MobiFlow Agent is the task-first decision and orchestration layer of MobiFlow. I
 
 - Main runtime: `TaskGraphRuntime`, backed by LangGraph.
 - Compatibility name: `TaskOrchestratorService`, graph-backed.
-- Current verified test baseline: `420 passed`.
+- Current verified test baseline: run `python -m pytest -q` in this subproject.
 - Scope: Agent runtime, simulation, memory, evaluation, and traceability. Real-device execution remains outside this subproject.
 
 ## Core Workflow
 
 ```text
-goal
-  -> plan
-  -> observe
+natural language task
+  -> task intake / interpreter
+  -> dynamic plan
+  -> dynamic_observe
   -> decide_step
-  -> execute proposal
+  -> dynamic_execute
   -> verify
   -> recover / replan if needed
   -> memory writeback
   -> trace export
 ```
 
-`TaskSession` remains the authoritative business state. LangGraph state only carries orchestration control fields.
+`PlannerAgent` now always produces dynamic phase steps. `TaskStepKind` exposes `DYNAMIC` and `RECOVER`; verification remains a fixed graph evidence gate, not a user-visible plan step type. `TaskSession` remains the authoritative business state. LangGraph state only carries orchestration control fields.
 
 ## Recent Agent Enhancements
 
@@ -37,12 +38,14 @@ goal
 - Task memory applicability, confidence scoring, feedback, risk isolation, and retrieval explanations.
 - `ExecutionTraceExporter` with JSON, Markdown, redaction, file export, and node-level timeline output.
 - Scenario regression suite grouped by normal, recovery, approval, fixed-script contrast, and memory capabilities, with report export.
+- `TaskIntakeService` and `TaskInterpreter` for converting bounded natural-language mobile goals into validated dynamic task sessions.
 
 ## Package Responsibilities
 
 ```text
 mobiflow_agent/
   graph/        LangGraph runtime, nodes, routes, and graph support ops
+  intake/       task interpreter, scenario templates, validation, verification spec factory
   agents/       planner, observer, step policy, executor, verifier, recovery
   task/         TaskSession, TaskPlan, TaskStep, task status models
   runtime/      harness, checkpointing, context compression, trace export
@@ -62,7 +65,7 @@ from mobiflow_agent import EntityKind, TaskGraphRuntime, VerificationCheck, Veri
 runtime = TaskGraphRuntime()
 
 session = runtime.create_session(
-    "[dynamic] Login to the demo app using bounded mobile UI actions.",
+    "Login to the demo app using bounded mobile UI actions.",
     target_kind=EntityKind.TASK,
     target_id="dynamic_login_success",
     verification_spec=VerificationSpec(
@@ -82,6 +85,21 @@ session = runtime.create_session(
 session = runtime.run(session)
 ```
 
+## Natural Language Intake
+
+```python
+from mobiflow_agent import TaskIntakeService, TaskGraphRuntime
+
+runtime = TaskGraphRuntime()
+intake = TaskIntakeService(runtime=runtime)
+result = intake.create_session_from_text("登录 demo app 并验证进入首页")
+
+if result.session is not None:
+    completed = runtime.run(result.session)
+```
+
+The first intake version is intentionally template-bounded. It supports the demo login, permission popup contrast, slow-loading recovery, and approval-required destructive-action scenarios. Unknown templates, invalid actions, invalid verification templates, and unconfirmed high-risk tasks do not create sessions.
+
 ## Scenario Regression Suite
 
 ```python
@@ -92,7 +110,7 @@ report = ScenarioRegressionSuiteRunner().run_default_suite()
 assert report.mismatched_cases == 0
 ```
 
-The default suite covers dynamic login, slow-loading recovery, retry recovery, approval-required actions, fixed-script contrast, and memory-related cases.
+The default suite covers dynamic login, slow-loading recovery, retry recovery, approval-required actions, fixed-script contrast, and memory-related cases. Fixed scripts are kept only as an evaluation baseline, not as an Agent runtime plan mode.
 
 Generate a demo report from the module CLI:
 
@@ -122,12 +140,6 @@ Task memory is not a raw log store. Records carry applicability context, confide
 ```powershell
 cd MobiFlow_Agent
 python -m pytest -q
-```
-
-Current expected baseline:
-
-```text
-420 passed
 ```
 
 ## Boundaries

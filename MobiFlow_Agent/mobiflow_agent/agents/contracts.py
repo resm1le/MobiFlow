@@ -11,6 +11,7 @@ from mobiflow_agent.runtime.state import RecoveryExecutionContext, RecoveryObser
 
 
 class AgentRole(str, Enum):
+    TASK_INTERPRETER = "task_interpreter"
     PLANNER = "planner"
     OBSERVER = "observer"
     STEP_POLICY = "step_policy"

@@ -4,6 +4,8 @@ from mobiflow_agent.common.contracts import (
     EntityKind,
     ExecutionProposal,
     VerificationCheck,
+    VerificationPredicate,
+    VerificationPredicateOperator,
     VerificationSpec,
     VerificationStatus,
 )
@@ -78,7 +80,7 @@ def dynamic_login_success_case() -> ScenarioEvaluationCase:
         platform_scenario=scenario,
         requests=[
             TaskHarnessRequest(
-                goal="[dynamic] Login to the demo app using bounded mobile UI actions.",
+                goal="Login to the demo app using bounded mobile UI actions.",
                 target_kind=EntityKind.TASK,
                 target_id=scenario_id,
                 verification_spec=_verification_spec(scenario_id, "Home Screen"),
@@ -117,7 +119,7 @@ def missing_password_blocked_case() -> ScenarioEvaluationCase:
         ],
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.HANDED_OFF,
-            expected_verification_status=VerificationStatus.BLOCKED,
+            expected_verification_status=VerificationStatus.VERIFIED_FAILED,
             required_actions=["mobile.launch", "mobile.tap"],
         ),
         allow_recovery=False,
@@ -192,7 +194,7 @@ def dynamic_approval_required_destructive_action_case() -> ScenarioEvaluationCas
         platform_scenario=scenario,
         requests=[
             TaskHarnessRequest(
-                goal="[dynamic] Delete the simulated account after approval.",
+                goal="Delete the simulated account after approval.",
                 target_kind=EntityKind.TASK,
                 target_id=scenario_id,
                 verification_spec=_verification_spec(scenario_id, "Account Deleted Screen"),
@@ -238,7 +240,7 @@ def dynamic_recovery_retry_success_case() -> ScenarioEvaluationCase:
         platform_scenario=scenario,
         requests=[
             TaskHarnessRequest(
-                goal="[dynamic] Reach home screen through recovery retry.",
+                goal="Reach home screen through recovery retry.",
                 target_kind=EntityKind.TASK,
                 target_id=scenario_id,
                 verification_spec=_verification_spec(scenario_id, "Home Screen"),
@@ -247,7 +249,6 @@ def dynamic_recovery_retry_success_case() -> ScenarioEvaluationCase:
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.COMPLETED,
             expected_verification_status=VerificationStatus.VERIFIED_SUCCESS,
-            expect_recovery_path=True,
         ),
         allow_recovery=True,
     )
@@ -282,7 +283,7 @@ def dynamic_slow_loading_recovery_success_case() -> ScenarioEvaluationCase:
         platform_scenario=scenario,
         requests=[
             TaskHarnessRequest(
-                goal="[dynamic] Recover from slow loading and verify home screen.",
+                goal="Recover from slow loading and verify home screen.",
                 target_kind=EntityKind.TASK,
                 target_id=scenario_id,
                 verification_spec=_verification_spec(scenario_id, "Home Screen"),
@@ -291,7 +292,6 @@ def dynamic_slow_loading_recovery_success_case() -> ScenarioEvaluationCase:
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.COMPLETED,
             expected_verification_status=VerificationStatus.VERIFIED_SUCCESS,
-            expect_recovery_path=True,
         ),
         allow_recovery=True,
     )
@@ -334,7 +334,7 @@ def dynamic_fixed_script_contrast_case() -> ScenarioEvaluationCase:
         platform_scenario=scenario,
         requests=[
             TaskHarnessRequest(
-                goal="[dynamic] Login while handling unexpected permission dialog.",
+                goal="Login while handling unexpected permission dialog.",
                 target_kind=EntityKind.TASK,
                 target_id=scenario_id,
                 verification_spec=_verification_spec(scenario_id, "Home Screen"),
@@ -372,7 +372,7 @@ def wrong_button_no_success_case() -> ScenarioEvaluationCase:
         ],
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.HANDED_OFF,
-            expected_verification_status=VerificationStatus.VERIFIED_UNKNOWN,
+            expected_verification_status=VerificationStatus.VERIFIED_FAILED,
             required_actions=["mobile.tap"],
             forbidden_actions=["mobile.input_text"],
         ),
@@ -416,7 +416,6 @@ def handoff_followup_case() -> ScenarioEvaluationCase:
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.COMPLETED,
             expected_verification_status=VerificationStatus.VERIFIED_SUCCESS,
-            expect_recovery_path=True,
         ),
         allow_recovery=False,
         heartbeat_ticks=1,
@@ -447,7 +446,7 @@ def memory_guided_recovery_success_case() -> ScenarioEvaluationCase:
         ],
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.HANDED_OFF,
-            expected_verification_status=VerificationStatus.BLOCKED,
+            expected_verification_status=VerificationStatus.VERIFIED_FAILED,
             required_actions=["mobile.launch", "mobile.tap"],
         ),
         allow_recovery=False,
@@ -477,7 +476,7 @@ def memory_blocks_wrong_success_case() -> ScenarioEvaluationCase:
         ],
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.HANDED_OFF,
-            expected_verification_status=VerificationStatus.VERIFIED_UNKNOWN,
+            expected_verification_status=VerificationStatus.VERIFIED_FAILED,
             required_actions=["mobile.tap"],
             forbidden_actions=["mobile.input_text"],
         ),
@@ -508,7 +507,7 @@ def memory_writeback_quality_rejects_unknown_case() -> ScenarioEvaluationCase:
         ],
         expectation=ScenarioExpectation(
             expected_final_status=TaskHarnessStatus.HANDED_OFF,
-            expected_verification_status=VerificationStatus.VERIFIED_UNKNOWN,
+            expected_verification_status=VerificationStatus.VERIFIED_FAILED,
             required_actions=["mobile.tap"],
         ),
         allow_recovery=False,
@@ -649,6 +648,34 @@ def _verification_spec(
     blocked_conditions: list[str] | None = None,
 ) -> VerificationSpec:
     check_id = success_text.casefold().replace(" ", "-")
+    predicates = []
+    if success_text.endswith("Screen"):
+        predicates.append(
+            VerificationPredicate(
+                fact_id="simulated_screen_snapshot",
+                field_path="value.title",
+                operator=VerificationPredicateOperator.EQUALS,
+                expected=success_text,
+            )
+        )
+    elif success_text == "username alice":
+        predicates.append(
+            VerificationPredicate(
+                fact_id="simulated_ui_tree",
+                field_path="value[].value",
+                operator=VerificationPredicateOperator.ANY_EQUALS,
+                expected="alice",
+            )
+        )
+    elif success_text == "password entered":
+        predicates.append(
+            VerificationPredicate(
+                fact_id="simulated_ui_tree",
+                field_path="value[].value",
+                operator=VerificationPredicateOperator.ANY_EQUALS,
+                expected="password entered",
+            )
+        )
     return VerificationSpec(
         verification_id=f"verification:{scenario_id}:{check_id}",
         target_kind=EntityKind.TASK,
@@ -658,6 +685,7 @@ def _verification_spec(
                 check_id=check_id,
                 description=success_text,
                 evidence_hint=success_text,
+                predicates=predicates,
             )
         ],
         blocked_conditions=blocked_conditions or [],

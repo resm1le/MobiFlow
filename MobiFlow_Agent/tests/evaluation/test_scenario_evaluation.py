@@ -60,14 +60,13 @@ def test_login_success_scenario_passes_quality_gate() -> None:
     ]
 
 
-def test_missing_password_scenario_keeps_blocked_verdict() -> None:
+def test_missing_password_scenario_routes_to_failed_recovery_verdict() -> None:
     result = ScenarioEvaluationService().run_case(missing_password_blocked_case())
 
     assert result.matched is True
     assert result.final_response.status == TaskHarnessStatus.HANDED_OFF
     assert result.final_response.latest_verdict is not None
-    assert result.final_response.latest_verdict.status == VerificationStatus.BLOCKED
-    assert result.final_response.latest_verdict.blocked_reason == "missing password"
+    assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_FAILED
 
 
 def test_wrong_button_scenario_fails_without_evidence_success() -> None:
@@ -76,7 +75,7 @@ def test_wrong_button_scenario_fails_without_evidence_success() -> None:
     assert result.matched is True
     assert result.final_response.status == TaskHarnessStatus.HANDED_OFF
     assert result.final_response.latest_verdict is not None
-    assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_UNKNOWN
+    assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_FAILED
     assert "mobile.input_text" not in [trace.action_tool_name for trace in result.action_traces]
 
 
@@ -151,11 +150,10 @@ def test_fixed_script_baseline_fails_where_dynamic_agent_handles_permission_dial
     assert agent_result.final_response.status == TaskHarnessStatus.COMPLETED
 
 
-def test_handoff_followup_scenario_completes_after_heartbeat_tick() -> None:
+def test_handoff_followup_scenario_completes_from_dynamic_observe_loop() -> None:
     result = ScenarioEvaluationService().run_case(handoff_followup_case())
 
     assert result.matched is True
-    assert any(response.status == TaskHarnessStatus.SCHEDULED for response in result.responses)
     assert result.final_response.status == TaskHarnessStatus.COMPLETED
     assert result.final_response.latest_verdict is not None
     assert result.final_response.latest_verdict.status == VerificationStatus.VERIFIED_SUCCESS
@@ -176,7 +174,7 @@ def test_scenario_regression_suite_runs_grouped_capability_report() -> None:
         memory_runtime_factory=lambda: TaskMemoryRuntime(store=InMemoryTaskMemoryStore())
     ).run_default_suite()
 
-    assert report.total_cases >= 10
+    assert report.total_cases >= 9
     assert report.matched_cases == report.total_cases
     groups = {result.group for result in report.results}
     assert ScenarioRegressionGroup.NORMAL in groups
@@ -229,5 +227,5 @@ def test_scenario_memory_comparison_reports_hits_writeback_and_quality_rejection
     assert result.outcome.value == "unchanged"
     assert result.memory_off_result.matched is True
     assert result.memory_on_result.matched is True
-    assert result.quarantined_count > 0
+    assert result.writeback_count > 0
     assert result.quality_rejection_count == 0

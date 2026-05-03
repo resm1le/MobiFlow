@@ -3,7 +3,7 @@ from mobiflow_agent.model.telemetry import ModelInvocationTrace
 from mobiflow_agent.platform.types import GovernedActionResult, GovernedActionState
 from mobiflow_agent.runtime.state import CallerContext, ConfirmationState, PendingExecution
 from mobiflow_agent.task.completion import TaskCompletionVerdict
-from mobiflow_agent.task.plan import TaskPlan, TaskStatus, TaskStep, TaskStepKind
+from mobiflow_agent.task.plan import TaskPlan, TaskStatus, TaskStep, TaskStepKind, TaskStepPolicy
 from mobiflow_agent.task.session import TaskSession
 
 
@@ -31,27 +31,17 @@ def test_task_plan_and_session_roundtrip() -> None:
     steps = [
         TaskStep(
             step_id="step-1",
-            kind=TaskStepKind.OBSERVE,
-            goal="Observe the blocked run",
-            verification_target_kind=EntityKind.RUN,
-            verification_target_id="run-123",
-        ),
-        TaskStep(
-            step_id="step-2",
-            kind=TaskStepKind.EXECUTE,
-            goal="Cancel the blocked run",
+            kind=TaskStepKind.DYNAMIC,
+            goal="Cancel the blocked run and verify the outcome.",
             verification_target_kind=EntityKind.RUN,
             verification_target_id="run-123",
             allowed_side_effects=["cancel_run"],
             proposal=proposal,
-        ),
-        TaskStep(
-            step_id="step-3",
-            kind=TaskStepKind.VERIFY,
-            goal="Verify the run outcome",
-            verification_target_kind=EntityKind.RUN,
-            verification_target_id="run-123",
             verification_spec=verification_spec,
+            policy=TaskStepPolicy(
+                policy_id="policy-1",
+                description="Dynamically inspect, execute the allowed action, and verify evidence.",
+            ),
         ),
     ]
     plan = TaskPlan(
@@ -65,7 +55,7 @@ def test_task_plan_and_session_roundtrip() -> None:
             session_id="session-1",
             agent_task_id="session-1",
             turn_id="3",
-            step_id="step-2",
+            step_id="step-1",
         ),
         confirmation_state=ConfirmationState.REQUIRED,
         confirmation_id="confirm-1",
@@ -87,8 +77,8 @@ def test_task_plan_and_session_roundtrip() -> None:
         initial_proposal=proposal,
         initial_verification_spec=verification_spec,
         plan=plan,
-        current_step_index=1,
-        current_step=steps[1],
+        current_step_index=0,
+        current_step=steps[0],
         active_verification_spec=verification_spec,
         last_execution_result=GovernedActionResult(
             state=GovernedActionState.APPROVAL_REQUIRED,
@@ -99,7 +89,7 @@ def test_task_plan_and_session_roundtrip() -> None:
         ),
         pending_execution=pending_execution,
         memory_context={"step-1": {"source": "memory"}},
-        evaluation_context={"step-3": {"source": "evaluation"}},
+        evaluation_context={"step-1": {"source": "evaluation"}},
         model_trace=[
             ModelInvocationTrace(
                 invocation_id="model-invocation-1",
@@ -118,8 +108,9 @@ def test_task_plan_and_session_roundtrip() -> None:
 
     assert restored.session_id == "session-1"
     assert restored.plan is not None
-    assert restored.plan.steps[1].proposal is not None
-    assert restored.plan.steps[1].proposal.action_tool_name == "cancel_run"
+    assert restored.plan.steps[0].kind == TaskStepKind.DYNAMIC
+    assert restored.plan.steps[0].proposal is not None
+    assert restored.plan.steps[0].proposal.action_tool_name == "cancel_run"
     assert restored.pending_execution is not None
     assert restored.pending_execution.confirmation_id == "confirm-1"
     assert restored.active_verification_spec is not None

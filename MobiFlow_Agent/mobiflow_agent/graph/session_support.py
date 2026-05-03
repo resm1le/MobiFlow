@@ -163,14 +163,8 @@ class TaskGraphSessionSupportMixin:
     def _role_for_step(step: TaskStep | None) -> AgentRole | None:
         if step is None:
             return None
-        if step.kind == TaskStepKind.OBSERVE:
-            return AgentRole.OBSERVER
         if step.kind == TaskStepKind.DYNAMIC:
             return AgentRole.OBSERVER
-        if step.kind == TaskStepKind.EXECUTE:
-            return AgentRole.EXECUTOR
-        if step.kind == TaskStepKind.VERIFY:
-            return AgentRole.VERIFIER
         if step.kind == TaskStepKind.RECOVER:
             return AgentRole.RECOVERY
         return None

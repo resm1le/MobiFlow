@@ -11,15 +11,15 @@ from mobiflow_agent.common.contracts import (
     VerificationVerdict,
 )
 from mobiflow_agent.runtime import ContextCompressionPolicy, ContextCompressionService
-from mobiflow_agent.task.plan import TaskPlan, TaskStatus, TaskStep, TaskStepKind
+from mobiflow_agent.task.plan import TaskPlan, TaskStatus, TaskStep, TaskStepKind, TaskStepPolicy
 from mobiflow_agent.task.session import TaskSession
 
 
 def _session() -> TaskSession:
     step = TaskStep(
         step_id="step-1",
-        kind=TaskStepKind.VERIFY,
-        goal="Verify the run outcome",
+        kind=TaskStepKind.DYNAMIC,
+        goal="Reach and verify the run outcome",
         expected_outputs=["verification_verdict"],
         verification_target_kind=EntityKind.RUN,
         verification_target_id="run-123",
@@ -34,6 +34,10 @@ def _session() -> TaskSession:
                     evidence_hint="healthy",
                 )
             ],
+        ),
+        policy=TaskStepPolicy(
+            policy_id="policy-1",
+            description="Dynamic context compression test policy.",
         ),
     )
     return TaskSession(

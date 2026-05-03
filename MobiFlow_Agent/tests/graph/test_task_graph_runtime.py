@@ -131,6 +131,7 @@ def test_task_graph_runtime_completes_observe_verify_chain() -> None:
     assert [request.role for request in completed.role_requests] == [
         AgentRole.PLANNER,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
     ]
     assert completed.status_history == [
@@ -198,8 +199,10 @@ def test_task_graph_runtime_executes_governed_action_and_verifies() -> None:
     assert [result.role for result in completed.role_results] == [
         AgentRole.PLANNER,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.EXECUTOR,
         AgentRole.OBSERVER,
+        AgentRole.STEP_POLICY,
         AgentRole.VERIFIER,
     ]
 
@@ -218,7 +221,7 @@ def test_task_graph_runtime_dynamic_step_succeeds_after_policy_decision() -> Non
 
     completed = runtime.run(
         runtime.create_session(
-            "[dynamic] Inspect blocked task",
+            "Inspect blocked task",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             verification_spec=_verification_spec(),
@@ -259,7 +262,7 @@ def test_task_graph_runtime_dynamic_step_can_observe_again_before_success() -> N
 
     completed = runtime.run(
         runtime.create_session(
-            "[dynamic] Inspect blocked task",
+            "Inspect blocked task",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             verification_spec=_verification_spec(),
@@ -361,7 +364,7 @@ def test_task_graph_runtime_dynamic_step_executes_allowed_proposal() -> None:
 
     completed = runtime.run(
         runtime.create_session(
-            "[dynamic] Cancel the blocked run",
+            "Cancel the blocked run",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             proposal=_proposal(),
@@ -411,7 +414,7 @@ def test_task_graph_runtime_dynamic_step_rejects_disallowed_proposal() -> None:
 
     failed = runtime.run(
         runtime.create_session(
-            "[dynamic] Cancel the blocked run",
+            "Cancel the blocked run",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             proposal=_proposal(),
@@ -523,7 +526,7 @@ def test_task_graph_runtime_dynamic_step_pauses_for_approval_and_resumes() -> No
     )
     paused = runtime.run(
         runtime.create_session(
-            "[dynamic] Cancel the blocked run",
+            "Cancel the blocked run",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             proposal=_proposal(),
@@ -698,7 +701,7 @@ def test_task_graph_runtime_dynamic_recovery_replan_retries_current_step() -> No
 
     completed = runtime.run(
         runtime.create_session(
-            "[dynamic] Inspect blocked task",
+            "Inspect blocked task",
             target_kind=EntityKind.RUN,
             target_id="run-123",
             verification_spec=_verification_spec(),
@@ -714,7 +717,7 @@ def test_task_graph_runtime_dynamic_recovery_replan_retries_current_step() -> No
     ]
 
 
-def test_task_graph_runtime_dynamic_recovery_replan_skips_to_verification_step() -> None:
+def test_task_graph_runtime_dynamic_recovery_replan_skip_without_next_step_fails_unknown() -> None:
     runtime = TaskGraphRuntime(
         observer_agent=ObserverAgent(observation_provider=lambda _session: _build_observation("observe-1", "run-123")),
         step_policy_agent=StepPolicyAgent(
@@ -727,7 +730,7 @@ def test_task_graph_runtime_dynamic_recovery_replan_skips_to_verification_step()
         verifier_agent=VerifierAgent(),
         recovery_agent=RecoveryAgent(
             recovery=lambda session, failure_verdict: RecoveryOutcome(
-                summary="Skip to explicit verification step.",
+                summary="Skip current dynamic step without a remaining plan step.",
                 target_kind=failure_verdict.target_kind,
                 target_id=failure_verdict.target_id,
                 replan_decision=ReplanDecision(
@@ -767,7 +770,7 @@ def test_task_graph_runtime_dynamic_recovery_replan_skips_to_verification_step()
     )
     session.plan = TaskPlan(
         plan_id="plan-1",
-        summary="Dynamic step followed by explicit verification.",
+        summary="Single dynamic step plan.",
         steps=[
             TaskStep(
                 step_id="step-dynamic",
@@ -780,24 +783,15 @@ def test_task_graph_runtime_dynamic_recovery_replan_skips_to_verification_step()
                     description="Try dynamic state preparation.",
                 ),
             ),
-            TaskStep(
-                step_id="step-verify",
-                kind=TaskStepKind.VERIFY,
-                goal="Verify run health.",
-                verification_target_kind=EntityKind.RUN,
-                verification_target_id="run-123",
-                verification_spec=_verification_spec(),
-            ),
         ],
     )
 
-    completed = runtime.run(session)
+    failed = runtime.run(session)
 
-    assert completed.status == TaskStatus.COMPLETED
-    assert completed.current_step is not None
-    assert completed.current_step.step_id == "step-verify"
-    assert completed.last_verdict is not None
-    assert completed.last_verdict.status == VerificationStatus.VERIFIED_SUCCESS
+    assert failed.status == TaskStatus.FAILED
+    assert failed.completion_verdict == TaskCompletionVerdict.UNKNOWN
+    assert failed.current_step is not None
+    assert failed.current_step.step_id == "step-dynamic"
 
 
 def test_task_graph_runtime_dynamic_recovery_replan_handoff_and_fail() -> None:
@@ -839,7 +833,7 @@ def test_task_graph_runtime_dynamic_recovery_replan_handoff_and_fail() -> None:
 
         result = runtime.run(
             runtime.create_session(
-                "[dynamic] Inspect blocked task",
+                "Inspect blocked task",
                 target_kind=EntityKind.RUN,
                 target_id="run-123",
                 verification_spec=_verification_spec(),

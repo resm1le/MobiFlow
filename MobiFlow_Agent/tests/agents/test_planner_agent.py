@@ -3,6 +3,7 @@ from mobiflow_agent.agents.planner import PlannerAgent
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, VerificationCheck, VerificationSpec
 from mobiflow_agent.model import ModelProfile, ModelRegistry, ModelRuntime, RoleModelPolicy
 from mobiflow_agent.model.providers import NoopModelClient
+from mobiflow_agent.task.plan import TaskStepKind
 from mobiflow_agent.task.session import TaskSession
 
 
@@ -61,38 +62,18 @@ def test_planner_agent_uses_model_runtime_and_records_trace() -> None:
                                 "steps": [
                                     {
                                         "step_id": "step-1",
-                                        "kind": "observe",
-                                        "goal": "Observe the run",
-                                        "expected_outputs": ["observation"],
-                                        "verification_target_kind": "run",
-                                        "verification_target_id": "run-123",
-                                    },
-                                    {
-                                        "step_id": "step-2",
-                                        "kind": "execute",
-                                        "goal": "Cancel the run",
-                                        "expected_outputs": ["execution_result"],
+                                        "kind": "dynamic",
+                                        "goal": "Cancel the run and verify the run state.",
+                                        "expected_outputs": ["dynamic_step_outcome"],
                                         "verification_target_kind": "run",
                                         "verification_target_id": "run-123",
                                         "allowed_side_effects": ["cancel_run"],
                                         "proposal": _proposal().model_dump(mode="python"),
-                                    },
-                                    {
-                                        "step_id": "step-3",
-                                        "kind": "observe",
-                                        "goal": "Observe after cancel",
-                                        "expected_outputs": ["observation"],
-                                        "verification_target_kind": "run",
-                                        "verification_target_id": "run-123",
-                                    },
-                                    {
-                                        "step_id": "step-4",
-                                        "kind": "verify",
-                                        "goal": "Verify the run",
-                                        "expected_outputs": ["verification_verdict"],
-                                        "verification_target_kind": "run",
-                                        "verification_target_id": "run-123",
                                         "verification_spec": _verification_spec().model_dump(mode="python"),
+                                        "policy": {
+                                            "policy_id": "policy-1",
+                                            "description": "Observe, execute allowed cancel action, then verify.",
+                                        },
                                     },
                                 ],
                             },
@@ -123,10 +104,34 @@ def test_planner_agent_uses_model_runtime_and_records_trace() -> None:
     )
 
     assert contract.contract_id == "contract-1"
-    assert len(plan.steps) == 4
+    assert len(plan.steps) == 1
+    assert plan.steps[0].kind == TaskStepKind.DYNAMIC
     assert result.payload["model_trace_refs"]
     assert len(session.model_trace) == 1
     assert session.model_trace[0].profile_name == "planner-profile"
+
+
+def test_planner_agent_fallback_always_generates_dynamic_step_for_plain_goal() -> None:
+    contract, plan, _ = PlannerAgent().plan(
+        session_id="session-1",
+        goal="Cancel the blocked run",
+        target_kind=EntityKind.RUN,
+        target_id="run-123",
+        proposal=_proposal(),
+        verification_spec=_verification_spec(),
+        session=TaskSession(
+            session_id="session-1",
+            goal="Cancel the blocked run",
+            target_kind=EntityKind.RUN,
+            target_id="run-123",
+        ),
+    )
+
+    assert contract.contract_id.startswith("task-contract:")
+    assert len(plan.steps) == 1
+    assert plan.steps[0].kind == TaskStepKind.DYNAMIC
+    assert plan.steps[0].proposal is not None
+    assert plan.steps[0].policy is not None
 
 
 def test_planner_agent_raises_when_model_output_is_invalid() -> None:

@@ -23,10 +23,14 @@ def test_execution_trace_exporter_outputs_json_and_markdown_without_sensitive_pa
     )
     step = TaskStep(
         step_id="step-1",
-        kind=TaskStepKind.EXECUTE,
-        goal="Enter password.",
+        kind=TaskStepKind.DYNAMIC,
+        goal="Enter password and verify login progress.",
         proposal=proposal,
         allowed_side_effects=["mobile.input_text"],
+        policy=TaskStepPolicy(
+            policy_id="policy-1",
+            description="Dynamic trace export test policy.",
+        ),
     )
     session = TaskSession(
         session_id="session-1",

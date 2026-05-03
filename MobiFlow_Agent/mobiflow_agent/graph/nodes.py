@@ -76,58 +76,6 @@ def activate_step(state: TaskGraphState, ops: TaskGraphOps) -> dict:
     return {"session": session, "route_hint": _active_step_route(session)}
 
 
-def observe(state: TaskGraphState, ops: TaskGraphOps) -> dict:
-    session = state.session
-    ops._transition(session, TaskStatus.OBSERVING)
-    observer_request = ops._build_request(
-        session,
-        AgentRole.OBSERVER,
-        "Read the latest platform facts for the active task step.",
-    )
-    try:
-        observation, observer_result = ops._dispatcher.observer.observe(session, observer_request)
-        session.last_observation = observation
-        ops._record_result(session, observer_result, next_role=ops._next_role_after_success(session))
-        ops._refresh_session_context(session)
-        ops._complete_step(session)
-        return {"session": session, "route_hint": _active_step_route(session), "last_error": None}
-    except Exception as exc:  # pragma: no cover - covered by injected graph tests when needed.
-        session.recovery_state = str(exc)
-        ops._refresh_session_context(session)
-        return {"session": session, "route_hint": "recover", "last_error": str(exc)}
-
-
-def execute(state: TaskGraphState, ops: TaskGraphOps) -> dict:
-    session = state.session
-    if ops._dispatcher.executor is None:
-        raise ValueError("TaskGraphRuntime requires an ExecutorAgent for executable steps.")
-    ops._transition(session, TaskStatus.EXECUTING)
-    executor_request = ops._build_request(
-        session,
-        AgentRole.EXECUTOR,
-        "Submit the governed side-effect proposal for the active step.",
-    )
-    execution_result, caller_context, executor_result = ops._dispatcher.executor.execute(session, executor_request)
-    ops._set_execution_state(session, execution_result, caller_context)
-    if execution_result.state == GovernedActionState.APPROVAL_REQUIRED:
-        ops._record_result(session, executor_result, next_role=None)
-        ops._transition(session, TaskStatus.AWAITING_APPROVAL)
-        session.completion_verdict = TaskCompletionVerdict.BLOCKED
-        ops._refresh_session_context(session)
-        return {"session": session, "route_hint": "finalize", "last_error": None}
-
-    ops._clear_pending_execution(session)
-    ops._record_result(session, executor_result, next_role=ops._next_role_after_success(session))
-    if execution_result.state != GovernedActionState.EXECUTED:
-        session.last_verdict = ops._execution_failure_verdict(session, execution_result)
-        ops._refresh_session_context(session)
-        return {"session": session, "route_hint": "recover", "last_error": None}
-
-    ops._refresh_session_context(session)
-    ops._complete_step(session)
-    return {"session": session, "route_hint": _active_step_route(session), "last_error": None}
-
-
 def dynamic_observe(state: TaskGraphState, ops: TaskGraphOps) -> dict:
     session = state.session
     ops._transition(session, TaskStatus.OBSERVING)
@@ -410,14 +358,8 @@ def finalize(state: TaskGraphState, ops: TaskGraphOps) -> dict:
 def _active_step_route(session: TaskSession) -> str:
     if session.status in TERMINAL_STATUSES or session.current_step is None:
         return "finalize"
-    if session.current_step.kind == TaskStepKind.OBSERVE:
-        return "observe"
     if session.current_step.kind == TaskStepKind.DYNAMIC:
         return "dynamic_observe"
-    if session.current_step.kind == TaskStepKind.EXECUTE:
-        return "execute"
-    if session.current_step.kind == TaskStepKind.VERIFY:
-        return "verify"
     if session.current_step.kind == TaskStepKind.RECOVER:
         return "recover"
     raise ValueError(f"Unsupported task step kind: {session.current_step.kind}")
@@ -485,9 +427,7 @@ __all__ = [
     "dynamic_execute",
     "dynamic_observe",
     "ensure_plan",
-    "execute",
     "finalize",
-    "observe",
     "recover",
     "resume_approval",
     "verify",

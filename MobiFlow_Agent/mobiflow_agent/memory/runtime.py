@@ -561,8 +561,6 @@ class TaskMemoryRuntime:
             return None
         if role == AgentRole.RECOVERY:
             return TaskStepKind.RECOVER
-        if role == AgentRole.VERIFIER:
-            return TaskStepKind.VERIFY
         return session.current_step.kind if session.current_step is not None else None
 
     @staticmethod

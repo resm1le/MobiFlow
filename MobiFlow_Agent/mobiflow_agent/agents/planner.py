@@ -92,26 +92,15 @@ class PlannerAgent:
         else:
             contract = self._build_contract(goal, target_kind, target_id)
             effective_spec = verification_spec or self._default_verification_spec(target_kind, target_id)
-            dynamic_mode = "[dynamic]" in goal.casefold() or "dynamic" in goal.casefold()
             plan = TaskPlan(
                 plan_id=build_task_plan_id(),
                 summary=f"Task control plan for: {goal}",
-                steps=(
-                    self._build_dynamic_steps(
-                        goal=goal,
-                        proposal=proposal,
-                        target_kind=target_kind,
-                        target_id=target_id,
-                        verification_spec=effective_spec,
-                    )
-                    if dynamic_mode
-                    else self._build_steps(
-                        goal=goal,
-                        proposal=proposal,
-                        target_kind=target_kind,
-                        target_id=target_id,
-                        verification_spec=effective_spec,
-                    )
+                steps=self._build_dynamic_steps(
+                    goal=goal,
+                    proposal=proposal,
+                    target_kind=target_kind,
+                    target_id=target_id,
+                    verification_spec=effective_spec,
                 ),
             )
         result = RoleResult(
@@ -153,61 +142,6 @@ class PlannerAgent:
             approval_mode=ApprovalMode.ON_RISK,
         )
 
-    def _build_steps(
-        self,
-        *,
-        goal: str,
-        proposal: ExecutionProposal | None,
-        target_kind: EntityKind | None,
-        target_id: str | None,
-        verification_spec: VerificationSpec | None,
-    ) -> list[TaskStep]:
-        steps = [
-            TaskStep(
-                step_id=build_task_step_id(),
-                kind=TaskStepKind.OBSERVE,
-                goal=f"Observe the current task state for: {goal}",
-                expected_outputs=["observation"],
-                verification_target_kind=target_kind,
-                verification_target_id=target_id,
-            )
-        ]
-        if proposal is not None:
-            steps.append(
-                TaskStep(
-                    step_id=build_task_step_id(),
-                    kind=TaskStepKind.EXECUTE,
-                    goal=f"Execute the governed action for: {goal}",
-                    expected_outputs=["execution_result"],
-                    verification_target_kind=target_kind,
-                    verification_target_id=target_id,
-                    allowed_side_effects=[proposal.action_tool_name],
-                    proposal=proposal,
-                )
-            )
-            steps.append(
-                TaskStep(
-                    step_id=build_task_step_id(),
-                    kind=TaskStepKind.OBSERVE,
-                    goal=f"Re-observe the task state after execution for: {goal}",
-                    expected_outputs=["observation"],
-                    verification_target_kind=target_kind,
-                    verification_target_id=target_id,
-                )
-            )
-        steps.append(
-            TaskStep(
-                step_id=build_task_step_id(),
-                kind=TaskStepKind.VERIFY,
-                goal=f"Verify the evidence-backed outcome for: {goal}",
-                expected_outputs=["verification_verdict"],
-                verification_target_kind=target_kind,
-                verification_target_id=target_id,
-                verification_spec=verification_spec,
-            )
-        )
-        return steps
-
     def _build_dynamic_steps(
         self,
         *,
@@ -226,6 +160,7 @@ class PlannerAgent:
                 verification_target_kind=target_kind,
                 verification_target_id=target_id,
                 allowed_side_effects=[proposal.action_tool_name] if proposal is not None else self.DEFAULT_DYNAMIC_SIDE_EFFECTS,
+                proposal=proposal,
                 verification_spec=verification_spec,
                 policy=TaskStepPolicy(
                     policy_id="dynamic-mobile-step-policy",

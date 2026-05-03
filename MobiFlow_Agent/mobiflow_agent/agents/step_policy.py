@@ -153,6 +153,18 @@ class StepPolicyAgent:
                 decision_type=StepDecisionType.STEP_SUCCEEDED,
                 summary="Default step policy found evidence that the dynamic step is ready for verification.",
             )
+        if (
+            session.current_step is not None
+            and session.current_step.proposal is not None
+            and session.last_execution_result is None
+        ):
+            proposal = session.current_step.proposal
+            return StepDecision(
+                decision_id=f"step-decision:{session.session_id}:{step_id}:{proposal.proposal_id}",
+                decision_type=StepDecisionType.PROPOSE_EXECUTION,
+                summary=f"Default step policy proposed the initial governed action {proposal.action_tool_name}.",
+                proposal=proposal,
+            )
         proposal = StepPolicyAgent._mobile_proposal(session)
         if proposal is not None:
             return StepDecision(

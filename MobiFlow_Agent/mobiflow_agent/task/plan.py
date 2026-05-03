@@ -21,10 +21,7 @@ class TaskStatus(str, Enum):
 
 
 class TaskStepKind(str, Enum):
-    OBSERVE = "observe"
     DYNAMIC = "dynamic"
-    EXECUTE = "execute"
-    VERIFY = "verify"
     RECOVER = "recover"
 
 
