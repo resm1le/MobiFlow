@@ -11,7 +11,13 @@ from mobiflow_agent.platform.evidence import (
     RUN_GOVERNANCE_FACT_ID,
     RUN_LINEAGE_FACT_ID,
 )
-from mobiflow_agent.platform.adapter import FakePlatformAdapter, HttpPlatformAdapter, PlatformAdapterError
+from mobiflow_agent.platform.adapter import (
+    FakePlatformAdapter,
+    HttpPlatformAdapter,
+    McpPlatformAdapter,
+    PlatformAdapterError,
+    create_platform_adapter,
+)
 from mobiflow_agent.platform.types import (
     FailureCategory,
     GovernedActionState,
@@ -36,6 +42,18 @@ class StubTransport:
 
     def download_bytes(self, path: str) -> bytes:
         raise AssertionError(f"Unexpected binary download: {path}")
+
+
+class StubMcpTransport:
+    def __init__(self, responses: dict[str, list[dict[str, Any]]] | None = None):
+        self.responses = responses or {}
+        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+
+    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.calls.append((method, params))
+        if method not in self.responses or not self.responses[method]:
+            raise AssertionError(f"Unexpected MCP call: {method}")
+        return self.responses[method].pop(0)
 
 
 def test_get_tool_catalog_maps_catalog_items() -> None:
@@ -76,6 +94,208 @@ def test_get_tool_catalog_maps_catalog_items() -> None:
     assert catalog[0].risk_level == ToolRiskLevel.EXECUTION
     assert catalog[0].confirmation_mode == "always"
     assert catalog[0].input_schema["required"] == ["runId"]
+
+
+def test_mcp_get_tool_catalog_maps_mcp_tools() -> None:
+    adapter = McpPlatformAdapter(
+        transport=StubMcpTransport(
+            {
+                "tools/list": [
+                    {
+                        "tools": [
+                            {
+                                "name": "cancel_run",
+                                "title": "Cancel Run",
+                                "description": "Cancel a blocked run.",
+                                "inputSchema": {"type": "object", "required": ["runId"]},
+                                "_meta": {
+                                    "mobiflow/toolKind": "side_effect",
+                                    "mobiflow/riskLevel": "EXECUTION",
+                                    "mobiflow/governance": {
+                                        "requiresApproval": True,
+                                        "confirmationMode": "explicit",
+                                    },
+                                    "mobiflow/semanticTags": ["run", "governed"],
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
+        )
+    )
+
+    catalog = adapter.get_tool_catalog()
+
+    assert len(catalog) == 1
+    assert catalog[0].name == "cancel_run"
+    assert catalog[0].risk_level == ToolRiskLevel.EXECUTION
+    assert catalog[0].requires_approval is True
+    assert catalog[0].semantic_tags == ["run", "governed"]
+
+
+def test_mcp_submit_execution_proposal_maps_completed_response() -> None:
+    transport = StubMcpTransport(
+        {
+            "tools/call": [
+                {
+                    "structuredContent": {
+                        "tool": "propose_governed_action",
+                        "status": "completed",
+                        "result": {"status": "accepted"},
+                        "warnings": ["policy logged"],
+                        "audit": {"auditId": "audit-1", "riskLevel": "execution"},
+                        "entityRefs": {"proposalId": "proposal-1", "runId": "run-1"},
+                    },
+                    "isError": False,
+                }
+            ]
+        }
+    )
+    adapter = McpPlatformAdapter(transport=transport)
+
+    result = adapter.submit_execution_proposal(
+        proposal=ExecutionProposal(
+            proposal_id="proposal-1",
+            action_tool_name="cancel_run",
+            arguments={"runId": "run-1"},
+            target_kind=EntityKind.RUN,
+            target_id="run-1",
+            rationale="Cancel blocked run.",
+        ),
+        caller_context=CallerContext(
+            session_id="session-1",
+            agent_task_id="task-1",
+            turn_id="turn-1",
+            step_id="step-1",
+        ),
+    )
+
+    assert result.state == GovernedActionState.EXECUTED
+    assert result.audit is not None and result.audit.audit_id == "audit-1"
+    assert result.entity_refs is not None and result.entity_refs.run_id == "run-1"
+    assert transport.calls[0][0] == "tools/call"
+    assert transport.calls[0][1]["name"] == "propose_governed_action"
+
+
+def test_mcp_submit_execution_proposal_maps_approval_required_response() -> None:
+    adapter = McpPlatformAdapter(
+        transport=StubMcpTransport(
+            {
+                "tools/call": [
+                    {
+                        "structuredContent": {
+                            "tool": "propose_governed_action",
+                            "status": "approval_required",
+                            "audit": {"auditId": "audit-2", "riskLevel": "execution"},
+                            "entityRefs": {"proposalId": "proposal-2", "runId": "run-2"},
+                            "confirmation": {
+                                "confirmationId": "confirm-2",
+                                "summary": "Approve cancelling run-2",
+                                "expiresAt": 1710000000000,
+                            },
+                        },
+                        "isError": False,
+                    }
+                ]
+            }
+        )
+    )
+
+    result = adapter.submit_execution_proposal(
+        proposal=ExecutionProposal(
+            proposal_id="proposal-2",
+            action_tool_name="cancel_run",
+            arguments={"runId": "run-2"},
+            target_kind=EntityKind.RUN,
+            target_id="run-2",
+            rationale="Cancel blocked run.",
+        ),
+        caller_context=CallerContext(
+            session_id="session-1",
+            agent_task_id="task-1",
+            turn_id="turn-1",
+            step_id="step-1",
+        ),
+    )
+
+    assert result.state == GovernedActionState.APPROVAL_REQUIRED
+    assert result.confirmation_id == "confirm-2"
+    assert result.confirmation_summary == "Approve cancelling run-2"
+
+
+def test_mcp_resolve_approval_calls_confirmation_tool() -> None:
+    transport = StubMcpTransport(
+        {
+            "tools/call": [
+                {
+                    "structuredContent": {
+                        "tool": "cancel_run",
+                        "status": "completed",
+                        "result": {"runId": "run-2"},
+                        "audit": {"auditId": "audit-3", "riskLevel": "execution"},
+                        "entityRefs": {"proposalId": "proposal-2", "runId": "run-2"},
+                    }
+                }
+            ]
+        }
+    )
+    adapter = McpPlatformAdapter(transport=transport)
+
+    result = adapter.resolve_approval(
+        "confirm-2",
+        True,
+        CallerContext(
+            session_id="session-1",
+            agent_task_id="task-1",
+            turn_id="turn-1",
+            step_id="step-1",
+        ),
+    )
+
+    assert result.state == GovernedActionState.EXECUTED
+    assert transport.calls[0][1]["name"] == "resolve_confirmation"
+    assert transport.calls[0][1]["arguments"] == {"confirmationId": "confirm-2", "decision": "approve"}
+
+
+def test_mcp_read_resource_maps_json_resource() -> None:
+    adapter = McpPlatformAdapter(
+        transport=StubMcpTransport(
+            {
+                "resources/read": [
+                    {
+                        "contents": [
+                            {
+                                "uri": "mobiflow://resource/rh_1",
+                                "mimeType": "application/json",
+                                "text": '{"ok": true}',
+                            }
+                        ]
+                    }
+                ]
+            }
+        )
+    )
+
+    assert adapter.read_resource("rh_1") == {"ok": True}
+
+
+def test_create_platform_adapter_defaults_to_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATFORM_MCP_URL", "http://control-service/mcp")
+    monkeypatch.delenv("PLATFORM_ADAPTER_KIND", raising=False)
+
+    adapter = create_platform_adapter()
+
+    assert isinstance(adapter, McpPlatformAdapter)
+
+
+def test_create_platform_adapter_can_select_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATFORM_ADAPTER_KIND", "http")
+    monkeypatch.setenv("PLATFORM_TOOL_BASE_URL", "http://control-service")
+
+    adapter = create_platform_adapter()
+
+    assert isinstance(adapter, HttpPlatformAdapter)
 
 
 def test_submit_execution_proposal_maps_completed_response() -> None:

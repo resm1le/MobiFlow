@@ -131,12 +131,14 @@ from mobiflow_agent.memory import (
 )
 from mobiflow_agent.model.prompting import PlannerPromptBuilder, RecoveryPromptBuilder, StepPolicyPromptBuilder, VerifierPromptBuilder
 from mobiflow_agent.platform import (
+    McpPlatformAdapter,
     SimulatedActionTrace,
     SimulatedMobilePlatformAdapter,
     SimulatedMobileScenario,
     SimulatedScreen,
     SimulatedTransition,
     SimulatedUiNode,
+    create_platform_adapter,
 )
 from mobiflow_agent.runtime import (
     ContextCompressionPolicy,
@@ -181,6 +183,7 @@ __all__ = [
     "ModelResponse",
     "ModelRuntime",
     "ModelSettings",
+    "McpPlatformAdapter",
     "MobileObservationSummary",
     "ObservationFact",
     "ObservationFactSource",
@@ -239,6 +242,7 @@ __all__ = [
     "TaskGraphRuntime",
     "TaskGraphState",
     "build_task_orchestration_graph",
+    "create_platform_adapter",
     "TaskIntakeResult",
     "TaskIntakeService",
     "TaskIntakeSpec",

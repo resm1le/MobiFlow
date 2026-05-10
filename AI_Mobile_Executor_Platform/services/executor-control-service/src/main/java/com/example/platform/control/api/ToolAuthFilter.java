@@ -29,8 +29,13 @@ public class ToolAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/tools/")
-                || "OPTIONS".equalsIgnoreCase(request.getMethod());
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+        String path = request.getRequestURI();
+        return !path.startsWith("/tools/")
+                && !path.equals("/mcp")
+                && !path.startsWith("/mcp/");
     }
 
     @Override
