@@ -1,5 +1,6 @@
 export type DeviceStatus = "ONLINE" | "OFFLINE" | "QUIESCED";
 export type TaskStatus =
+  | "DRAFT"
   | "QUEUED"
   | "RUNNING"
   | "SUCCEEDED"
@@ -15,18 +16,22 @@ export type RunTargetStatus =
   | "FAILED"
   | "CANCELLED";
 export type AttemptStatus =
+  | "CREATED"
   | "LEASED"
   | "RUNNING"
   | "SUCCEEDED"
   | "FAILED"
   | "CANCELLED"
-  | "LEASE_EXPIRED"
-  | "PRECHECK_FAILED";
+  | "PRECHECK_FAILED"
+  | "SYSTEM_ABORTED"
+  | "LEASE_EXPIRED";
 export type DeviceCommandType =
-  | "QUIESCE"
+  | "STOP_LOOP"
+  | "CANCEL_ATTEMPT"
   | "FORCE_HEALTH_CHECK"
   | "REREGISTER"
-  | "CANCEL_ATTEMPT";
+  | "REFRESH_CONFIG"
+  | "QUIESCE";
 
 export interface DeviceSummary {
   deviceId: string;

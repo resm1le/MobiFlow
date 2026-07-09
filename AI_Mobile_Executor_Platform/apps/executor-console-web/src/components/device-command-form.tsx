@@ -5,10 +5,12 @@ import type { DeviceCommandType } from "../lib/types";
 import { ErrorState, SuccessState } from "./ui";
 
 const COMMAND_OPTIONS: DeviceCommandType[] = [
-  "QUIESCE",
+  "STOP_LOOP",
+  "CANCEL_ATTEMPT",
   "FORCE_HEALTH_CHECK",
   "REREGISTER",
-  "CANCEL_ATTEMPT",
+  "REFRESH_CONFIG",
+  "QUIESCE",
 ];
 
 export function DeviceCommandForm({
