@@ -130,7 +130,7 @@ class RunPlanControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(runPlanningContextBody()))
                 .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.error").value("PROVIDER_OUTPUT_INVALID"));
+                .andExpect(jsonPath("$.code").value("PROVIDER_OUTPUT_INVALID"));
     }
 
     private String runPlanningContextBody() {

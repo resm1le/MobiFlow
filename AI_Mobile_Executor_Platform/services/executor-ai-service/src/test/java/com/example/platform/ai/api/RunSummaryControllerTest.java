@@ -84,7 +84,7 @@ class RunSummaryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(runSummaryContextBody()))
                 .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.error").value("PROVIDER_OUTPUT_INVALID"));
+                .andExpect(jsonPath("$.code").value("PROVIDER_OUTPUT_INVALID"));
     }
 
     private String runSummaryContextBody() {

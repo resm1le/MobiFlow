@@ -22,7 +22,8 @@ public class ApiExceptionHandler {
         HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
         return ResponseEntity.status(status).body(Map.of(
                 "code", exception.getReason() == null ? status.name() : exception.getReason(),
-                "message", exception.getReason() == null ? status.getReasonPhrase() : exception.getReason()
+                "message", exception.getReason() == null ? status.getReasonPhrase() : exception.getReason(),
+                "status", status.value()
         ));
     }
 
@@ -35,7 +36,8 @@ public class ApiExceptionHandler {
         String code = resolveValidationCode(exception, request == null ? null : request.getRequestURI());
         return ResponseEntity.badRequest().body(Map.of(
                 "code", code,
-                "message", code
+                "message", code,
+                "status", HttpStatus.BAD_REQUEST.value()
         ));
     }
 
