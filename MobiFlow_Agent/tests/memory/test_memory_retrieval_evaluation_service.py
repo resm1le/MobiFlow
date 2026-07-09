@@ -15,9 +15,7 @@ from mobiflow_agent.common.contracts import (
     VerificationStatus,
     VerificationVerdict,
 )
-from mobiflow_agent.execution.recovery.execution import (
-    GovernedRecoveryExecutionResponse,
-)
+from mobiflow_agent.execution.recovery.models import GovernedRecoveryExecutionResponse
 from mobiflow_agent.memory.case import RecoveryCaseQuery, RecoveryMemoryCase
 from mobiflow_agent.memory.catalog import MemoryCasePersistenceService
 from mobiflow_agent.memory.case import MemoryCaseRetrievalService

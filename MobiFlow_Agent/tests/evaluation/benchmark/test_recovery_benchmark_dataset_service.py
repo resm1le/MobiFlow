@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from mobiflow_agent.common.contracts import EntityKind, EvidenceKind, EvidenceRef, VerificationStatus, VerificationVerdict
-from mobiflow_agent.execution.recovery.execution import GovernedRecoveryExecutionResponse
+from mobiflow_agent.execution.recovery.models import GovernedRecoveryExecutionResponse
 from mobiflow_agent.memory.case import MemoryCaseRetrievalService
 from mobiflow_agent.evaluation.benchmark.dataset import (
     RecoveryBenchmarkDataset,

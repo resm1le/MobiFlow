@@ -21,7 +21,7 @@ from mobiflow_agent.platform.types import (
     ToolAuditRef,
     ToolRiskLevel,
 )
-from mobiflow_agent.execution.recovery.execution import RecoveryExecutionContext, RecoveryObservationResult
+from mobiflow_agent.runtime.state import RecoveryExecutionContext, RecoveryObservationResult
 from mobiflow_agent.runtime.state import (
     AgentRuntimeState,
     CallerContext,
