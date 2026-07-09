@@ -33,26 +33,6 @@ class TaskGraphRuntimeProjectionMixin:
             audit_refs=audit_refs,
         )
 
-    def apply_runtime_state(self, session: TaskSession, runtime_state: AgentRuntimeState) -> TaskSession:
-        session.status = self._from_runtime_lifecycle(runtime_state.lifecycle)
-        if not session.status_history or session.status_history[-1] != session.status:
-            session.status_history.append(session.status)
-        session.current_step_index = runtime_state.step_index
-        if session.plan is not None:
-            if runtime_state.step_index >= len(session.plan.steps):
-                raise ValueError("Runtime state step_index is outside the active TaskPlan.")
-            session.current_step = session.plan.steps[runtime_state.step_index]
-        session.target_kind = session.target_kind or runtime_state.focus_kind
-        session.target_id = session.target_id or runtime_state.focus_id
-        session.last_observation = runtime_state.latest_observation
-        session.pending_execution = runtime_state.pending_execution
-        session.recovery_execution = runtime_state.recovery_execution
-        session.recovery_observation = runtime_state.recovery_observation
-        session.recovery_state = runtime_state.recovery_summary
-        session.active_verification_spec = runtime_state.active_verification
-        session.last_verdict = runtime_state.latest_verdict
-        return session
-
     @staticmethod
     def _to_runtime_lifecycle(status: TaskStatus) -> RuntimeLifecycle:
         mapping = {
@@ -68,19 +48,6 @@ class TaskGraphRuntimeProjectionMixin:
             TaskStatus.HANDED_OFF: RuntimeLifecycle.BLOCKED,
         }
         return mapping[status]
-
-    @staticmethod
-    def _from_runtime_lifecycle(lifecycle: RuntimeLifecycle) -> TaskStatus:
-        mapping = {
-            RuntimeLifecycle.DRAFTING: TaskStatus.PLANNING,
-            RuntimeLifecycle.OBSERVING: TaskStatus.OBSERVING,
-            RuntimeLifecycle.AWAITING_APPROVAL: TaskStatus.AWAITING_APPROVAL,
-            RuntimeLifecycle.EXECUTING: TaskStatus.EXECUTING,
-            RuntimeLifecycle.VERIFYING: TaskStatus.VERIFYING,
-            RuntimeLifecycle.COMPLETED: TaskStatus.COMPLETED,
-            RuntimeLifecycle.BLOCKED: TaskStatus.FAILED,
-        }
-        return mapping[lifecycle]
 
 
 __all__ = ["TaskGraphRuntimeProjectionMixin"]

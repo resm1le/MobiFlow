@@ -25,7 +25,7 @@ from mobiflow_agent.evaluation.benchmark.comparison import (
 from mobiflow_agent.evaluation.benchmark.comparison import (
     RecoveryBenchmarkRunReportComparisonService,
 )
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 
 
 def _case_result(

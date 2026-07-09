@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from mobiflow_agent.common.contracts import VerificationStatus
 from mobiflow_agent.graph import TaskGraphRuntime
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.runtime.context import ContextHandoff
 from mobiflow_agent.runtime.harness.errors import TaskHarnessError, TaskHarnessTransitionError
 from mobiflow_agent.runtime.harness.models import (

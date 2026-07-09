@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from mobiflow_agent.common.contracts import EntityKind, EvidenceKind, EvidenceRef, VerificationStatus, VerificationVerdict
-from mobiflow_agent.execution.recovery.execution import GovernedRecoveryExecutionResponse
+from mobiflow_agent.execution.recovery.models import GovernedRecoveryExecutionResponse
 from mobiflow_agent.memory.case import MemoryCaseRetrievalService
 from mobiflow_agent.evaluation.benchmark.suite import (
     RecoveryBenchmarkCase,
@@ -11,7 +11,7 @@ from mobiflow_agent.evaluation.benchmark.suite import (
     RecoveryBenchmarkSuite,
 )
 from mobiflow_agent.evaluation.benchmark.suite import RecoveryBenchmarkService
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from tests.harness_helpers import build_task_harness_response
 from mobiflow_agent.evaluation.replay import RecoveryEvalCase, RecoveryReplayCase
 from mobiflow_agent.runtime.state import AgentRuntimeState, RuntimeLifecycle

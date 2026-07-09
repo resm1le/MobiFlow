@@ -9,7 +9,7 @@ from pydantic import Field, model_validator
 
 from mobiflow_agent.common.contracts import StrictModel, VerificationStatus
 from mobiflow_agent.memory.case import RecoveryMemoryCase
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.evaluation.replay import RecoveryEvalCase
 
 class RecoveryBenchmarkSchemaVersion(str, Enum):

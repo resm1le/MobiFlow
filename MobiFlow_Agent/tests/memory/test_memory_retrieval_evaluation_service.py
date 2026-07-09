@@ -15,9 +15,7 @@ from mobiflow_agent.common.contracts import (
     VerificationStatus,
     VerificationVerdict,
 )
-from mobiflow_agent.execution.recovery.execution import (
-    GovernedRecoveryExecutionResponse,
-)
+from mobiflow_agent.execution.recovery.models import GovernedRecoveryExecutionResponse
 from mobiflow_agent.memory.case import RecoveryCaseQuery, RecoveryMemoryCase
 from mobiflow_agent.memory.catalog import MemoryCasePersistenceService
 from mobiflow_agent.memory.case import MemoryCaseRetrievalService
@@ -36,7 +34,7 @@ from mobiflow_agent.memory.evaluation import (
 from mobiflow_agent.memory.evaluation import (
     MemoryRetrievalEvaluationService,
 )
-from mobiflow_agent.execution.followup.driver import (
+from mobiflow_agent.execution.followup.decisions import (
     RecoveryFollowupDriverDecision,
 )
 from tests.harness_helpers import build_task_harness_response

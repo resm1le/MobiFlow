@@ -1,1 +1,1 @@
-"""Governed recovery execution modules."""
+"""Recovery execution modules."""

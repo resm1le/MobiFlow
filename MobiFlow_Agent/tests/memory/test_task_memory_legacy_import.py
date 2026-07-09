@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from mobiflow_agent.common.contracts import EntityKind, EvidenceKind, EvidenceRef, VerificationStatus, VerificationVerdict
 from mobiflow_agent.evaluation.replay import RecoveryReplayCase
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
-from mobiflow_agent.execution.recovery.execution import GovernedRecoveryExecutionResponse
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.recovery.models import GovernedRecoveryExecutionResponse
 from mobiflow_agent.memory import InMemoryTaskMemoryStore, TaskMemoryLegacyImportService, TaskMemoryRecordKind
 from mobiflow_agent.memory.case import MemoryCaseRetrievalService
 from mobiflow_agent.runtime.state import AgentRuntimeState, RuntimeLifecycle

@@ -8,7 +8,7 @@ from pydantic import Field
 
 from mobiflow_agent.common.contracts import StrictModel, VerificationStatus
 from mobiflow_agent.memory.quality import MemoryCaseQualityDecision
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 
 class MemoryVectorAdapterSchemaVersion(str, Enum):
     V1 = "v1"
