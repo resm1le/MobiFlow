@@ -11,7 +11,7 @@ from urllib.parse import quote
 from pydantic import Field, ValidationError
 
 from mobiflow_agent.common.contracts import StrictModel, VerificationStatus
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.memory.case import (
     MemoryCaseRetrievalService,
     RecoveryCaseMatch,

@@ -5,7 +5,7 @@ from enum import Enum
 from pydantic import Field, model_validator
 
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, StrictModel, VerificationSpec, VerificationVerdict
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.runtime.context import ContextHandoff
 from mobiflow_agent.runtime.state import AgentRuntimeState
 from mobiflow_agent.task.completion import TaskCompletionVerdict

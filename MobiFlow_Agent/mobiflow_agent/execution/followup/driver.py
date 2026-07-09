@@ -2,10 +2,9 @@ from __future__ import annotations
 
 """Recovery follow-up driver contracts and service."""
 
-from enum import Enum
-
 from pydantic import Field
 
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.common.contracts import StrictModel
 from mobiflow_agent.execution.recovery.execution import GovernedRecoveryExecutionResponse
 from mobiflow_agent.platform.adapter import PlatformAdapter
@@ -17,12 +16,6 @@ from mobiflow_agent.execution.followup.scheduling import (
 )
 from mobiflow_agent.execution.followup.outcome import RecoveryOutcomeFollowupResponse
 from mobiflow_agent.runtime.state import RuntimeLifecycle
-
-class RecoveryFollowupDriverDecision(str, Enum):
-    SCHEDULE_NEXT = "schedule_next"
-    HANDOFF_ONLY = "handoff_only"
-    COMPLETE = "complete"
-    NO_FOLLOWUP = "no_followup"
 
 class RecoveryFollowupDriverJob(StrictModel):
     run_target_id: str = Field(min_length=1)

@@ -8,7 +8,7 @@ from uuid import uuid4
 from pydantic import Field
 
 from mobiflow_agent.common.contracts import StrictModel, VerificationStatus
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.evaluation.replay import RecoveryEvalCase, RecoveryReplayCase
 from mobiflow_agent.memory.models import TaskMemoryRecord, TaskMemoryRecordKind
 from mobiflow_agent.runtime.harness import TaskHarnessResponse
