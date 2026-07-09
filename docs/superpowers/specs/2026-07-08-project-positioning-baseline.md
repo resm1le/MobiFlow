@@ -96,3 +96,38 @@
 ---
 
 *本基准为意图对齐产物,不含实现方案。下一步若要落地整改,应基于本基准对第一梯队(A1/A3)先做一次针对性验证(确认 governed recovery 子图、`AgentRuntimeState` 的实际生产调用方),再进入实现计划。*
+
+---
+
+## 六、整改进展(2026-07-09 更新)
+
+按本基准"离核心命题的距离"重加权后执行。**所有命题相关 / 要修档已清完并推送** GitHub `resm1le/MobiFlow`。
+
+### 已完成
+
+| 项 | 层 | 内容 | commit |
+|----|----|------|--------|
+| A1 | 🏆 Agent | 删死的 `apply_runtime_state` 反向投影 + 有损枚举表 | `edc5e7b`(合并) |
+| A3 | 🏆 Agent | 删不可达的 governed/blocked_run 恢复子系统(~5000 行),抢救存活模型 `GovernedRecoveryExecutionResponse` 到 `execution/recovery/models.py` | 同上 |
+| A9 | 🏆 Agent | `dynamic_observe` 保留 `retryable`/`code` 信号,可重试错误走有界重试而非误判永久失败 | `002a6d2` |
+| A5 | 🏆 Agent | `_normalize_route` 未知 hint 改抛错,误路由不再静默 `finalize` | 同上 |
+| P8 | 🔧 Platform | 前端枚举同步后端 `DomainValues`,修复 `STOP_LOOP`/`REFRESH_CONFIG` 命令下发功能缺口 | `c6ea220` |
+| P3 | 🔧 Platform | Phase3 枚举一致性测试,守护 `Phase3AiModels` ↔ `DomainValues.PHASE3_*` | `24326e6` |
+| P6 | 🔧 Platform | 两服务错误信封统一为 `{code,message,status}` | `6f5c5a2` |
+
+### 剩余债务(全部低优先级,按基准"可缓/容忍/产品化前偿还"档)
+
+- **Agent 层(产品化前偿还)**:A4 http/mcp 适配器重复(**注意:实证已确认两适配器生产不可达、仅测试用,纯代码卫生**)、A6 `TaskGraphOps` Protocol 镜像、A7 `memory/runtime.py` god object(788 行)
+- **Platform 层(可缓)**:P1 `ToolFacadeService`(2493 行 god object)、P2 贫血领域、P9 AiBridge 双侧重复校验
+- **Android 层(容忍)**:整层未动 —— K1/K2 god class、K3 伪插件 SPI、K4 三套 DSL 等
+
+### 方法论备注(下次接续参考)
+
+**实证优先**是本轮反复奏效的关键:每次动手前派 agent 追踪真实调用链,多次修正了初始分析报告 `~/Desktop/MobiFlow_设计分析报告_2026-07-08.md` 的判断——
+- A1/A3:报告"疑似需重写"→ 实为死代码,只需删
+- A3 执行中:`GovernedRecoveryExecutionResponse` 被报告误判为死,实为 memory/replay 活消费 → 抢救迁移
+- P3:报告"已漂移"→ 实为当前同步,故只加守护测试而非重量级共享模块
+- A4/A9:报告以 A4 为重点,实证发现 A4 生产不可达、A9 才威胁命题 → 重排优先级
+
+**教训**:分析报告的技术严重度不等于整改优先级;删除/重构前必须实证核实"活/死"与"是否触及命题",不可照报告直接动手。
+
