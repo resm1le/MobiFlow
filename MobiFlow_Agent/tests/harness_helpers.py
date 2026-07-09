@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mobiflow_agent.common.contracts import VerificationStatus, VerificationVerdict
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from mobiflow_agent.runtime.harness import TaskHarnessResponse, TaskHarnessStatus
 from mobiflow_agent.task.completion import TaskCompletionVerdict
 

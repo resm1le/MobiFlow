@@ -22,7 +22,7 @@ from mobiflow_agent.memory.embedding import (
     RecoveryMemoryEmbeddingDocument,
 )
 from mobiflow_agent.memory.embedding import MemoryEmbeddingAssetService
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from tests.harness_helpers import build_task_harness_response
 from mobiflow_agent.evaluation.replay import RecoveryEvalCase, RecoveryReplayCase
 from mobiflow_agent.runtime.state import AgentRuntimeState, RuntimeLifecycle

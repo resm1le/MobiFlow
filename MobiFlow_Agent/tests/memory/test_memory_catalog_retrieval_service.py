@@ -20,7 +20,7 @@ from mobiflow_agent.memory.catalog import (
     MemoryCatalogRetrievalSchemaVersion,
 )
 from mobiflow_agent.memory.catalog import MemoryCatalogRetrievalService
-from mobiflow_agent.execution.followup.driver import RecoveryFollowupDriverDecision
+from mobiflow_agent.execution.followup.decisions import RecoveryFollowupDriverDecision
 from tests.harness_helpers import build_task_harness_response
 from mobiflow_agent.evaluation.replay import RecoveryReplayCase
 from mobiflow_agent.runtime.state import AgentRuntimeState, RuntimeLifecycle
