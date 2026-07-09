@@ -5,3 +5,8 @@ __pycache__/
 .test-artifacts/
 var/test-artifacts/
 task-harness-test.sqlite3
+
+# Python build artifacts
+*.egg-info/
+build/
+dist/
