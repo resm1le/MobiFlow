@@ -4,6 +4,7 @@ from typing import Protocol
 
 from mobiflow_agent.agents.contracts import AgentRole, ReplanDecisionType, StepDecisionType
 from mobiflow_agent.common.contracts import EntityKind, VerificationStatus, VerificationVerdict
+from mobiflow_agent.platform.adapter import PlatformAdapterError
 from mobiflow_agent.platform.types import GovernedActionState
 from mobiflow_agent.runtime.state import ConfirmationState
 from mobiflow_agent.task.completion import TaskCompletionVerdict
@@ -19,6 +20,9 @@ TERMINAL_STATUSES = {
     TaskStatus.AWAITING_APPROVAL,
     TaskStatus.HANDED_OFF,
 }
+
+
+_MAX_OBSERVE_RETRIES = 2
 
 
 class TaskGraphOps(Protocol):
@@ -84,16 +88,27 @@ def dynamic_observe(state: TaskGraphState, ops: TaskGraphOps) -> dict:
         AgentRole.OBSERVER,
         "Read the latest platform facts for the active dynamic task step.",
     )
-    try:
-        observation, observer_result = ops._dispatcher.observer.observe(session, observer_request)
-        session.last_observation = observation
-        ops._record_result(session, observer_result, next_role=AgentRole.STEP_POLICY)
-        ops._refresh_session_context(session)
-        return {"session": session, "route_hint": "decide_step", "last_error": None}
-    except Exception as exc:  # pragma: no cover
-        session.recovery_state = str(exc)
-        ops._refresh_session_context(session)
-        return {"session": session, "route_hint": "recover", "last_error": str(exc)}
+    attempt = 0
+    while True:
+        try:
+            observation, observer_result = ops._dispatcher.observer.observe(session, observer_request)
+            session.last_observation = observation
+            ops._record_result(session, observer_result, next_role=AgentRole.STEP_POLICY)
+            ops._refresh_session_context(session)
+            return {"session": session, "route_hint": "decide_step", "last_error": None}
+        except PlatformAdapterError as exc:
+            if exc.retryable and attempt < _MAX_OBSERVE_RETRIES:
+                attempt += 1
+                continue
+            detail = f"{exc.code}: {exc.message} (retryable={exc.retryable})"
+            session.recovery_state = detail
+            ops._refresh_session_context(session)
+            return {"session": session, "route_hint": "recover", "last_error": detail}
+        except Exception as exc:  # pragma: no cover
+            detail = repr(exc)
+            session.recovery_state = detail
+            ops._refresh_session_context(session)
+            return {"session": session, "route_hint": "recover", "last_error": detail}
 
 
 def decide_step(state: TaskGraphState, ops: TaskGraphOps) -> dict:

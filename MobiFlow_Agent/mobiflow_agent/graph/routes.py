@@ -57,7 +57,7 @@ def _normalize_route(route_hint: str | None) -> str:
         return "writeback_memory"
     if route_hint == "verify_recovery":
         return "verify_recovery"
-    return "finalize"
+    raise ValueError(f"Unknown graph route hint: {route_hint!r}")
 
 
 __all__ = [

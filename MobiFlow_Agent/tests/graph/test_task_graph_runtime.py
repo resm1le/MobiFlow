@@ -29,6 +29,7 @@ from mobiflow_agent.control import TaskOrchestratorService
 from mobiflow_agent.control.orchestrator import TaskOrchestratorService as OrchestratorCompatImport
 from mobiflow_agent.graph import TaskGraphRuntime, TaskGraphState
 from mobiflow_agent.platform.adapter import FakePlatformAdapter
+from mobiflow_agent.platform.adapter import PlatformAdapterError
 from mobiflow_agent.platform.types import GovernedActionResult, GovernedActionState
 from mobiflow_agent.runtime import (
     InMemoryTaskHarnessStore,
@@ -141,6 +142,68 @@ def test_task_graph_runtime_completes_observe_verify_chain() -> None:
         TaskStatus.VERIFYING,
         TaskStatus.COMPLETED,
     ]
+
+
+def test_task_graph_runtime_retries_retryable_observe_error_then_completes() -> None:
+    calls = {"count": 0}
+    observation = _build_observation("observe-1", "run-123", status="healthy")
+
+    def observe(_session):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise PlatformAdapterError("TRANSPORT_ERROR", "transient blip", retryable=True)
+        return observation
+
+    runtime = TaskGraphRuntime(
+        observer_agent=ObserverAgent(observation_provider=observe),
+        verifier_agent=VerifierAgent(),
+        recovery_agent=RecoveryAgent(),
+    )
+
+    completed = runtime.run(
+        runtime.create_session(
+            "Inspect blocked task",
+            target_kind=EntityKind.RUN,
+            target_id="run-123",
+            verification_spec=_verification_spec(),
+        )
+    )
+
+    assert calls["count"] == 2
+    assert completed.status == TaskStatus.COMPLETED
+    assert completed.completion_verdict == TaskCompletionVerdict.TASK_COMPLETED
+
+
+def test_task_graph_runtime_non_retryable_observe_error_preserves_code_and_recovers() -> None:
+    seen = {}
+
+    def observe(_session):
+        raise PlatformAdapterError("INVALID_TOOL_STATUS", "permanent failure", retryable=False)
+
+    def recovery_outcome(session, failure_verdict):
+        seen["recovery_state"] = session.recovery_state
+        return RecoveryOutcome(
+            summary="handed off after non-retryable observe failure",
+        )
+
+    runtime = TaskGraphRuntime(
+        observer_agent=ObserverAgent(observation_provider=observe),
+        verifier_agent=VerifierAgent(),
+        recovery_agent=RecoveryAgent(recovery=recovery_outcome),
+    )
+
+    runtime.run(
+        runtime.create_session(
+            "Inspect blocked task",
+            target_kind=EntityKind.RUN,
+            target_id="run-123",
+            verification_spec=_verification_spec(),
+        )
+    )
+
+    assert seen["recovery_state"] is not None
+    assert "INVALID_TOOL_STATUS" in seen["recovery_state"]
+    assert "retryable=False" in seen["recovery_state"]
 
 
 def test_task_orchestrator_service_is_graph_backed_compatibility_name() -> None:
