@@ -56,4 +56,34 @@ class TestCaseParserPromptBuilder:
         )
 
 
-__all__ = ["TaskInterpreterPromptBuilder", "TestCaseParserPromptBuilder"]
+class AssertionSynthesizerPromptBuilder:
+    def build(
+        self,
+        *,
+        outcome_text: str,
+        allowed_fact_ids: list[str],
+        allowed_operators: list[str],
+        violation: str | None = None,
+    ) -> PromptBundle:
+        return PromptBundle(
+            system_prompt=(
+                "You synthesize a single verification check for one expected outcome of a mobile "
+                "regression test. Emit at least one structured predicate. Each predicate.operator MUST "
+                "be one of allowed_operators; each predicate.fact_id MUST be one of allowed_fact_ids; "
+                "field_path must be non-empty (e.g. 'value.title' or 'value[].node_id'). For a "
+                "not_exists predicate, anchor fact_id to a screen fact that is reliably observed so "
+                "you test 'absent on a screen we DID observe'. evidence_hint is human context only and "
+                "must never be the sole matcher. Return only the structured assertion."
+            ),
+            context_payload={
+                "outcome_text": outcome_text,
+                "allowed_fact_ids": allowed_fact_ids,
+                "allowed_operators": allowed_operators,
+                "previous_violation": violation or "",
+            },
+            preserve_keys=["outcome_text", "allowed_fact_ids", "allowed_operators", "previous_violation"],
+            metadata={"prompt_kind": "assertion_synthesizer"},
+        )
+
+
+__all__ = ["AssertionSynthesizerPromptBuilder", "TaskInterpreterPromptBuilder", "TestCaseParserPromptBuilder"]
