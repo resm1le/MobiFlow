@@ -79,14 +79,39 @@ def test_export_json_returns_redacted_dict() -> None:
 
 
 def test_export_json_redacts_sensitive_keys() -> None:
-    report = _report()
-    # Inject a sensitive key into a nested dict via a fresh verdict summary is key-based only;
-    # verify the shared _redact runs by masking a known SENSITIVE_KEY on the dumped structure.
-    exporter = TestSuiteReportExporter()
-    payload = exporter.export_json(report)
-    dumped = exporter.dumps_json(report)
-    # No sensitive key names survive unredacted where present; smoke-check the discipline runs.
-    assert "[REDACTED]" not in dumped or isinstance(payload, dict)
+    # TestSuiteReport/TestRunResult are StrictModel (extra="forbid"), so sensitive keys
+    # cannot be injected as top-level fields on the real model shape.  The honest test is
+    # to exercise _redact directly: it is a pure classmethod on a plain dict.
+    redacted = TestSuiteReportExporter._redact(
+        {
+            "token": "sk-secret",
+            "safe": "keep-me",
+            "nested": {
+                "api_key": "key-value",
+                "password": "hunter2",
+                "normal": "visible",
+            },
+            "list_field": [
+                {"authorization": "Bearer abc", "data": "ok"},
+            ],
+        }
+    )
+    # Sensitive keys are masked at every nesting level.
+    assert redacted["token"] == "[REDACTED]"
+    assert redacted["nested"]["api_key"] == "[REDACTED]"
+    assert redacted["nested"]["password"] == "[REDACTED]"
+    assert redacted["list_field"][0]["authorization"] == "[REDACTED]"
+    # Non-sensitive keys are preserved unchanged.
+    assert redacted["safe"] == "keep-me"
+    assert redacted["nested"]["normal"] == "visible"
+    assert redacted["list_field"][0]["data"] == "ok"
+    # Secret values must not appear anywhere in the output.
+    import json
+    dumped = json.dumps(redacted)
+    assert "sk-secret" not in dumped
+    assert "key-value" not in dumped
+    assert "hunter2" not in dumped
+    assert "Bearer abc" not in dumped
 
 
 def test_export_markdown_builds_from_redacted_dict_with_masked_ids() -> None:
