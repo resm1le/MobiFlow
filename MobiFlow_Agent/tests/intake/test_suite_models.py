@@ -118,3 +118,23 @@ def test_test_suite_report_total_zero_requires_zero_pass_rate() -> None:
             pass_rate=1.0,
             results=[],
         )
+
+
+def test_public_exports_are_importable() -> None:
+    from mobiflow_agent.intake import (
+        SuiteCaseInput,
+        SuiteCaseOutcome,
+        TestRunResult,
+        TestSuite,
+        TestSuiteReport,
+        TestSuiteRunner,
+    )
+    from mobiflow_agent.runtime import TestSuiteReportExporter
+
+    assert SuiteCaseOutcome.PASSED.value == "passed"
+    assert TestSuiteRunner is not None
+    assert TestSuiteReportExporter is not None
+    assert all(
+        cls is not None
+        for cls in (SuiteCaseInput, TestRunResult, TestSuite, TestSuiteReport)
+    )
