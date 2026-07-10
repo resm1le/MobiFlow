@@ -104,8 +104,6 @@ class AssertionSynthesizer:
         if not assertion.predicates:
             return "no_predicate"
         for predicate in assertion.predicates:
-            if predicate.operator not in VerificationPredicateOperator:
-                return f"illegal_operator:{predicate.operator}"
             if not predicate.field_path.strip():
                 return "empty_field_path"
             if predicate.fact_id is None or predicate.fact_id not in self._allowed_fact_ids:

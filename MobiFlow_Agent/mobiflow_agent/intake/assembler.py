@@ -18,6 +18,8 @@ class SessionAssembly(StrictModel):
 
 
 class TestCaseAssembler:
+    __test__ = False
+
     def assemble(
         self, test_case: TestCase, success_checks: list[VerificationCheck]
     ) -> SessionAssembly:

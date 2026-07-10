@@ -111,6 +111,8 @@ class TaskInterpreter:
 
 
 class TestCaseParser:
+    __test__ = False
+
     def __init__(
         self,
         *,

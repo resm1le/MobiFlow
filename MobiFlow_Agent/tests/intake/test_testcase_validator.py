@@ -2,14 +2,14 @@ from mobiflow_agent.intake.models import AssertionPredicate, ExpectedOutcome, Te
 from mobiflow_agent.intake.validation import TestCaseValidator
 
 
-def _outcome() -> ExpectedOutcome:
+def _outcome(*, confidence: float = 0.9) -> ExpectedOutcome:
     return ExpectedOutcome(
         raw_text="Home screen is visible",
         predicate=AssertionPredicate.EQUALS,
         observation_fact_id="simulated_screen_snapshot",
         field_path="value.title",
         expected_value="Home Screen",
-        confidence=0.9,
+        confidence=confidence,
     )
 
 
@@ -77,3 +77,34 @@ def test_validator_preserves_risk_confirmation_gate() -> None:
     assert blocked.accepted is False
     assert "confirmation_required" in blocked.issues
     assert confirmed.accepted is True
+
+
+def test_validator_gates_low_confidence_assertion() -> None:
+    case = TestCase(
+        case_id="case-5",
+        raw_goal="Login and reach home.",
+        normalized_goal="Login and reach home.",
+        expected_outcomes=[_outcome(confidence=0.3)],
+        needs_confirmation=False,
+    )
+
+    result = TestCaseValidator().validate(case, confirmed=False)
+
+    assert result.accepted is False
+    assert "low_confidence_assertion" in result.issues
+    assert result.clarification_questions
+
+
+def test_validator_accepts_low_confidence_assertion_when_confirmed() -> None:
+    case = TestCase(
+        case_id="case-6",
+        raw_goal="Login and reach home.",
+        normalized_goal="Login and reach home.",
+        expected_outcomes=[_outcome(confidence=0.3)],
+        needs_confirmation=False,
+    )
+
+    result = TestCaseValidator().validate(case, confirmed=True)
+
+    assert result.accepted is True
+    assert "low_confidence_assertion" not in result.issues

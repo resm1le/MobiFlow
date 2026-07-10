@@ -66,6 +66,9 @@ class OutcomeOrigin(str, Enum):
 
 
 class ExpectedOutcome(StrictModel):
+    # `predicate`, `observation_fact_id`, `field_path`, and `expected_value` are the
+    # parser's best-effort structured hint; `AssertionSynthesizer` authoritatively
+    # re-synthesizes predicates from `raw_text` and does not consume these fields.
     raw_text: str = Field(min_length=1)
     predicate: AssertionPredicate
     observation_fact_id: str | None = None
@@ -76,11 +79,15 @@ class ExpectedOutcome(StrictModel):
 
 
 class TestStep(StrictModel):
+    __test__ = False
+
     raw_text: str = Field(min_length=1)
     hint_action: str | None = None
 
 
 class TestCase(StrictModel):
+    __test__ = False
+
     case_id: str = Field(min_length=1)
     raw_goal: str = Field(min_length=1)
     normalized_goal: str = Field(min_length=1)

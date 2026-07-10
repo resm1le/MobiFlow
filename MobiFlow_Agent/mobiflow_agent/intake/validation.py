@@ -57,8 +57,16 @@ class TaskIntakeValidator:
 
 
 class TestCaseValidator:
-    def __init__(self, *, allowed_actions: set[str] | None = None) -> None:
+    __test__ = False
+
+    def __init__(
+        self,
+        *,
+        allowed_actions: set[str] | None = None,
+        confidence_threshold: float = 0.6,
+    ) -> None:
         self._allowed_actions = allowed_actions or set(DEFAULT_MOBILE_ACTIONS)
+        self._confidence_threshold = confidence_threshold
 
     def validate(self, test_case: TestCase, *, confirmed: bool = False) -> TaskIntakeValidationResult:
         issues: list[str] = []
@@ -77,6 +85,14 @@ class TestCaseValidator:
         if test_case.risk_flags and test_case.needs_confirmation and not confirmed:
             issues.append("confirmation_required")
             questions.append("该用例包含高风险操作，需要显式确认后才能创建执行 session。")
+
+        low_confidence = any(
+            outcome.confidence < self._confidence_threshold
+            for outcome in test_case.expected_outcomes
+        )
+        if low_confidence and not confirmed:
+            issues.append("low_confidence_assertion")
+            questions.append("部分预期结果的置信度较低，请人工确认这些断言后再执行。")
 
         normalized_issues = self._dedupe(issues)
         return TaskIntakeValidationResult(
