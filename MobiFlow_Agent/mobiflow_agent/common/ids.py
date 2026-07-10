@@ -31,3 +31,7 @@ def build_role_request_id() -> str:
 
 def build_role_result_id() -> str:
     return _build_id("role-result")
+
+
+def build_suite_run_id() -> str:
+    return _build_id("suite-run")
