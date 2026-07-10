@@ -478,3 +478,99 @@ def test_verifier_agent_loading_screen_returns_unknown_with_diagnostics() -> Non
     assert verdict.diagnostics["suspected_current_state"] == "Loading Screen"
     assert verdict.diagnostics["suggested_recovery_direction"] == "observe_or_recover"
     assert verdict.model_dump(mode="json")["diagnostics"]["missing_evidence"] is False
+
+
+def test_verifier_agent_not_exists_matches_when_node_absent_on_present_screen() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:logout",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="login-button-gone",
+                description="Login button is no longer present.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_ui_tree",
+                        field_path="value[].node_id",
+                        operator=VerificationPredicateOperator.NOT_EXISTS,
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-home",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_ui_tree",
+                source=ObservationFactSource.PLATFORM,
+                title="Tree",
+                value=[],
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="tree-evidence",
+                        kind=EvidenceKind.ARTIFACT,
+                        summary="Empty tree.",
+                        locator="home",
+                    )
+                ],
+            )
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.VERIFIED_SUCCESS
+    assert verdict.matched_check_ids == ["login-button-gone"]
+
+
+def test_verifier_agent_not_exists_does_not_match_when_anchor_fact_unobserved() -> None:
+    spec = VerificationSpec(
+        verification_id="verification:logout",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        success_checks=[
+            VerificationCheck(
+                check_id="login-button-gone",
+                description="Login button is no longer present.",
+                predicates=[
+                    VerificationPredicate(
+                        fact_id="simulated_ui_tree",
+                        field_path="value[].node_id",
+                        operator=VerificationPredicateOperator.NOT_EXISTS,
+                    )
+                ],
+            )
+        ],
+    )
+    session = _session_with_verification_spec(spec)
+    observation = ObservationView(
+        observation_id="observe-other",
+        focus_kind=EntityKind.TASK,
+        focus_id="task-1",
+        facts=[
+            ObservationFact(
+                fact_id="simulated_screen_snapshot",
+                source=ObservationFactSource.PLATFORM,
+                title="Screen",
+                value={"screen_id": "home", "title": "Home Screen"},
+                evidence_refs=[
+                    EvidenceRef(
+                        evidence_id="screen-evidence",
+                        kind=EvidenceKind.PLATFORM_SNAPSHOT,
+                        summary="Screen evidence.",
+                        locator="home",
+                    )
+                ],
+            )
+        ],
+    )
+
+    verdict, _ = VerifierAgent().verify(session, observation)
+
+    assert verdict.status == VerificationStatus.VERIFIED_UNKNOWN
+    assert verdict.unmatched_check_ids == ["login-button-gone"]

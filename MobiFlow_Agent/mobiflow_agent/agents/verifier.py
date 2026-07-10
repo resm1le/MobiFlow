@@ -454,6 +454,8 @@ class VerifierAgent:
     def _predicate_values_match(predicate: VerificationPredicate, values: list) -> bool:
         if predicate.operator == VerificationPredicateOperator.EXISTS:
             return bool(values)
+        if predicate.operator == VerificationPredicateOperator.NOT_EXISTS:
+            return not bool(values)
         if predicate.operator in {
             VerificationPredicateOperator.ANY_EQUALS,
             VerificationPredicateOperator.ANY_CONTAINS,
