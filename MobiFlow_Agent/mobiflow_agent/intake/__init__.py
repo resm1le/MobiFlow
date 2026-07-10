@@ -26,6 +26,14 @@ from mobiflow_agent.intake.synthesizer import (
 from mobiflow_agent.intake.templates import DEFAULT_MOBILE_ACTIONS, ScenarioTemplate, ScenarioTemplateRegistry
 from mobiflow_agent.intake.validation import TaskIntakeValidator, TestCaseValidator
 from mobiflow_agent.intake.verification_factory import VerificationSpecFactory
+from mobiflow_agent.intake.suite import (
+    SuiteCaseInput,
+    SuiteCaseOutcome,
+    TestRunResult,
+    TestSuite,
+    TestSuiteReport,
+)
+from mobiflow_agent.intake.suite_runner import TestSuiteRunner
 
 __all__ = [
     "AssertionPredicate",
@@ -39,6 +47,8 @@ __all__ = [
     "ScenarioTemplate",
     "ScenarioTemplateRegistry",
     "SessionAssembly",
+    "SuiteCaseInput",
+    "SuiteCaseOutcome",
     "SynthesizedAssertion",
     "TaskIntakeResult",
     "TaskIntakeService",
@@ -53,6 +63,10 @@ __all__ = [
     "TestCaseParser",
     "TestCaseParserPromptBuilder",
     "TestCaseValidator",
+    "TestRunResult",
     "TestStep",
+    "TestSuite",
+    "TestSuiteReport",
+    "TestSuiteRunner",
     "VerificationSpecFactory",
 ]

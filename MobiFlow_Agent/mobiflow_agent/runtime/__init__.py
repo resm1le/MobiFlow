@@ -41,6 +41,7 @@ __all__ = [
     "RuntimeLifecycle",
     "SessionContextDigest",
     "StepContextSummary",
+    "TestSuiteReportExporter",
     "create_checkpointer",
     "TaskHarnessError",
     "InMemoryTaskHarnessStore",
@@ -83,5 +84,8 @@ def __getattr__(name: str):
         return getattr(module, name)
     if name == "ExecutionTraceExporter":
         module = import_module("mobiflow_agent.runtime.trace_export")
+        return getattr(module, name)
+    if name == "TestSuiteReportExporter":
+        module = import_module("mobiflow_agent.runtime.suite_report_export")
         return getattr(module, name)
     raise AttributeError(f"module 'mobiflow_agent.runtime' has no attribute {name!r}")
