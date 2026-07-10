@@ -1,15 +1,45 @@
-from mobiflow_agent.intake.interpreter import TaskInterpreter
-from mobiflow_agent.intake.models import TaskIntakeResult, TaskIntakeSpec, TaskIntakeStatus, TaskIntakeValidationResult
-from mobiflow_agent.intake.prompting import TaskInterpreterPromptBuilder
+from mobiflow_agent.intake.assembler import SessionAssembly, TestCaseAssembler
+from mobiflow_agent.intake.interpreter import TaskInterpreter, TestCaseParser
+from mobiflow_agent.intake.models import (
+    AssertionPredicate,
+    ExpectedOutcome,
+    OutcomeOrigin,
+    TaskIntakeResult,
+    TaskIntakeSpec,
+    TaskIntakeStatus,
+    TaskIntakeValidationResult,
+    TestCase,
+    TestStep,
+)
+from mobiflow_agent.intake.prompting import (
+    AssertionSynthesizerPromptBuilder,
+    TaskInterpreterPromptBuilder,
+    TestCaseParserPromptBuilder,
+)
 from mobiflow_agent.intake.service import TaskIntakeService
+from mobiflow_agent.intake.synthesizer import (
+    AssertionSynthesisResult,
+    AssertionSynthesizer,
+    PHASE_1_FACT_CATALOG,
+    SynthesizedAssertion,
+)
 from mobiflow_agent.intake.templates import DEFAULT_MOBILE_ACTIONS, ScenarioTemplate, ScenarioTemplateRegistry
-from mobiflow_agent.intake.validation import TaskIntakeValidator
+from mobiflow_agent.intake.validation import TaskIntakeValidator, TestCaseValidator
 from mobiflow_agent.intake.verification_factory import VerificationSpecFactory
 
 __all__ = [
+    "AssertionPredicate",
+    "AssertionSynthesisResult",
+    "AssertionSynthesizer",
+    "AssertionSynthesizerPromptBuilder",
     "DEFAULT_MOBILE_ACTIONS",
+    "ExpectedOutcome",
+    "OutcomeOrigin",
+    "PHASE_1_FACT_CATALOG",
     "ScenarioTemplate",
     "ScenarioTemplateRegistry",
+    "SessionAssembly",
+    "SynthesizedAssertion",
     "TaskIntakeResult",
     "TaskIntakeService",
     "TaskIntakeSpec",
@@ -18,5 +48,11 @@ __all__ = [
     "TaskIntakeValidator",
     "TaskInterpreter",
     "TaskInterpreterPromptBuilder",
+    "TestCase",
+    "TestCaseAssembler",
+    "TestCaseParser",
+    "TestCaseParserPromptBuilder",
+    "TestCaseValidator",
+    "TestStep",
     "VerificationSpecFactory",
 ]

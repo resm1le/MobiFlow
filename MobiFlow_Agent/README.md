@@ -92,13 +92,18 @@ from mobiflow_agent import TaskIntakeService, TaskGraphRuntime
 
 runtime = TaskGraphRuntime()
 intake = TaskIntakeService(runtime=runtime)
-result = intake.create_session_from_text("登录 demo app 并验证进入首页")
+
+# New: compile a natural-language regression TestCase (model-runtime backed).
+result = intake.submit_test_case("Log out and confirm the login button disappears.")
+
+# Legacy template-bounded path (still supported):
+legacy = intake.create_session_from_text("登录 demo app 并验证进入首页")
 
 if result.session is not None:
     completed = runtime.run(result.session)
 ```
 
-The first intake version is intentionally template-bounded. It supports the demo login, permission popup contrast, slow-loading recovery, and approval-required destructive-action scenarios. Unknown templates, invalid actions, invalid verification templates, and unconfirmed high-risk tasks do not create sessions.
+`submit_test_case` runs the four-stage pipeline (`TestCaseParser → TestCaseValidator → AssertionSynthesizer → TestCaseAssembler`) to compile prose into a `TestCase` and a `VerificationSpec`. Synthesized assertions are confined to the six-member predicate vocabulary (`exists, not_exists, equals, contains, any_equals, any_contains`) over the simulation fact catalog (`mobile_observation_summary`, `simulated_screen_snapshot`, `simulated_ui_tree`); out-of-vocabulary assertions are rejected and retried once before asking for clarification. Real-device observation-fact enrichment is a separate follow-up. `create_session_from_text` remains the template-bounded path for the demo login, permission popup contrast, slow-loading recovery, and approval-required destructive-action scenarios.
 
 ## Scenario Regression Suite
 
