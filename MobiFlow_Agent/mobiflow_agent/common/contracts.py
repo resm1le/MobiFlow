@@ -173,6 +173,7 @@ class VerificationCheck(StrictModel):
 
 class VerificationPredicateOperator(str, Enum):
     EXISTS = "exists"
+    NOT_EXISTS = "not_exists"
     EQUALS = "equals"
     CONTAINS = "contains"
     ANY_EQUALS = "any_equals"

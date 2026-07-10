@@ -37,6 +37,7 @@ class TaskIntakeSpec(StrictModel):
 class TaskIntakeResult(StrictModel):
     status: TaskIntakeStatus
     spec: TaskIntakeSpec | None = None
+    test_case: "TestCase | None" = None
     session: TaskSession | None = None
     clarification_questions: list[str] = Field(default_factory=list)
     issues: list[str] = Field(default_factory=list)
@@ -49,9 +50,64 @@ class TaskIntakeValidationResult(StrictModel):
     clarification_questions: list[str] = Field(default_factory=list)
 
 
+class AssertionPredicate(str, Enum):
+    EXISTS = "exists"
+    NOT_EXISTS = "not_exists"
+    EQUALS = "equals"
+    CONTAINS = "contains"
+    ANY_EQUALS = "any_equals"
+    ANY_CONTAINS = "any_contains"
+
+
+class OutcomeOrigin(str, Enum):
+    MODEL_SYNTHESIZED = "model_synthesized"
+    USER_AUTHORED = "user_authored"
+    TEMPLATE = "template"
+
+
+class ExpectedOutcome(StrictModel):
+    # `predicate`, `observation_fact_id`, `field_path`, and `expected_value` are the
+    # parser's best-effort structured hint; `AssertionSynthesizer` authoritatively
+    # re-synthesizes predicates from `raw_text` and does not consume these fields.
+    raw_text: str = Field(min_length=1)
+    predicate: AssertionPredicate
+    observation_fact_id: str | None = None
+    field_path: str = Field(min_length=1)
+    expected_value: Any | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    origin: OutcomeOrigin = OutcomeOrigin.MODEL_SYNTHESIZED
+
+
+class TestStep(StrictModel):
+    __test__ = False
+
+    raw_text: str = Field(min_length=1)
+    hint_action: str | None = None
+
+
+class TestCase(StrictModel):
+    __test__ = False
+
+    case_id: str = Field(min_length=1)
+    raw_goal: str = Field(min_length=1)
+    normalized_goal: str = Field(min_length=1)
+    steps: list[TestStep] = Field(default_factory=list)
+    expected_outcomes: list[ExpectedOutcome] = Field(default_factory=list)
+    target_app: str | None = None
+    approval_mode: ApprovalMode = ApprovalMode.ON_RISK
+    risk_flags: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    needs_confirmation: bool = True
+
+
 __all__ = [
+    "AssertionPredicate",
+    "ExpectedOutcome",
+    "OutcomeOrigin",
     "TaskIntakeResult",
     "TaskIntakeSpec",
     "TaskIntakeStatus",
     "TaskIntakeValidationResult",
+    "TestCase",
+    "TestStep",
 ]
