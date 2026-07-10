@@ -15,6 +15,20 @@ from mobiflow_agent.intake.suite_runner import TestSuiteRunner
 from mobiflow_agent.task.plan import TaskStatus
 from mobiflow_agent.task.session import TaskSession
 
+from mobiflow_agent.agents import ExecutorAgent, ObserverAgent
+from mobiflow_agent.agents.contracts import AgentRole
+from mobiflow_agent.common.contracts import VerificationPredicate, VerificationPredicateOperator
+from mobiflow_agent.control import TaskControlPolicy
+from mobiflow_agent.evaluation.scenario import dynamic_login_success_case
+from mobiflow_agent.graph import TaskGraphRuntime
+from mobiflow_agent.intake.interpreter import TestCaseParser
+from mobiflow_agent.intake.models import AssertionPredicate, ExpectedOutcome, TestCase
+from mobiflow_agent.intake.service import TaskIntakeService
+from mobiflow_agent.intake.synthesizer import AssertionSynthesizer, SynthesizedAssertion
+from mobiflow_agent.model import ModelProfile, ModelRegistry, ModelRuntime, RoleModelPolicy
+from mobiflow_agent.model.providers import NoopModelClient
+from mobiflow_agent.platform.simulation import SimulatedMobilePlatformAdapter
+
 
 def _verdict(status: VerificationStatus, *, summary: str = "done") -> VerificationVerdict:
     evidence = [
@@ -274,3 +288,107 @@ def test_case_forwards_platform_context_and_confirmed() -> None:
     runner.run(suite)
     assert intake.calls[0]["platform_context"] == {"device": "pixel"}
     assert intake.calls[0]["confirmed"] is True
+
+
+def _model_runtime(*responses) -> ModelRuntime:
+    return ModelRuntime(
+        ModelRegistry(
+            profiles=[ModelProfile(name="intake-profile", provider="noop", model="noop-model")],
+            clients={"noop": NoopModelClient(responses=list(responses))},
+        ),
+        role_policy=RoleModelPolicy(role_profiles={AgentRole.TASK_INTERPRETER.value: "intake-profile"}),
+    )
+
+
+def _login_case() -> TestCase:
+    return TestCase(
+        case_id="dynamic_login_success",
+        raw_goal="Login to the demo app and confirm the home screen is visible.",
+        normalized_goal="Login to the demo app using bounded mobile UI actions.",
+        expected_outcomes=[
+            ExpectedOutcome(
+                raw_text="Home Screen is visible",
+                predicate=AssertionPredicate.EQUALS,
+                observation_fact_id="simulated_screen_snapshot",
+                field_path="value.title",
+                expected_value="Home Screen",
+                confidence=0.95,
+            )
+        ],
+        needs_confirmation=False,
+    )
+
+
+def _login_assertion() -> SynthesizedAssertion:
+    return SynthesizedAssertion(
+        check_id="home-screen-visible",
+        description="Home Screen is visible.",
+        evidence_hint="Home Screen",
+        predicates=[
+            VerificationPredicate(
+                fact_id="simulated_screen_snapshot",
+                field_path="value.title",
+                operator=VerificationPredicateOperator.EQUALS,
+                expected="Home Screen",
+            )
+        ],
+    )
+
+
+def _real_service_and_runtime():
+    case = dynamic_login_success_case()
+    adapter = SimulatedMobilePlatformAdapter(case.platform_scenario, target_id=case.scenario_id)
+    runtime = TaskGraphRuntime(
+        observer_agent=ObserverAgent(adapter=adapter),
+        executor_agent=ExecutorAgent(adapter),
+        policy=TaskControlPolicy(allow_recovery=case.allow_recovery),
+        memory_runtime=None,  # decision #3: reproducible, order-independent
+    )
+    service = TaskIntakeService(
+        runtime=runtime,
+        parser=TestCaseParser(model_runtime=_model_runtime(_login_case())),
+        synthesizer=AssertionSynthesizer(model_runtime=_model_runtime(_login_assertion())),
+    )
+    return service, runtime
+
+
+def test_end_to_end_suite_runs_prose_case_to_passed_on_simulation_adapter() -> None:
+    service, runtime = _real_service_and_runtime()
+    runner = TestSuiteRunner(service, runtime)
+    suite = TestSuite(
+        suite_id="suite-e2e",
+        name="login regression",
+        cases=[
+            SuiteCaseInput(
+                case_id="login-01",
+                text="Login to the demo app and confirm the home screen is visible.",
+            )
+        ],
+    )
+
+    report = runner.run(suite)
+
+    assert report.total == 1
+    assert report.passed == 1
+    assert report.pass_rate == 1.0
+    result = report.results[0]
+    assert result.outcome is SuiteCaseOutcome.PASSED
+    assert result.session_status is TaskStatus.COMPLETED
+    assert result.verdict is not None
+    assert result.verdict.status is VerificationStatus.VERIFIED_SUCCESS
+    assert result.run_id.startswith("suite-run:")
+    assert result.session_id is not None
+
+
+def test_distinct_session_ids_across_cases() -> None:
+    # Each case must submit with session_id=None -> a fresh session id per case.
+    passed_a = _session(TaskStatus.COMPLETED, verdict=_verdict(VerificationStatus.VERIFIED_SUCCESS), session_id="task-session:a")
+    passed_b = _session(TaskStatus.COMPLETED, verdict=_verdict(VerificationStatus.VERIFIED_SUCCESS), session_id="task-session:b")
+    intake = _IntakeStub([_ready(passed_a), _ready(passed_b)])
+    runtime = _RuntimeStub([passed_a, passed_b])
+    runner = TestSuiteRunner(intake, runtime, run_id_factory=lambda: "suite-run:x", clock=lambda: 1)
+    report = runner.run(_suite("c1", "c2"))
+    session_ids = [r.session_id for r in report.results]
+    assert session_ids == ["task-session:a", "task-session:b"]
+    assert len(set(session_ids)) == 2
+    assert all(call["session_id"] is None for call in intake.calls)
