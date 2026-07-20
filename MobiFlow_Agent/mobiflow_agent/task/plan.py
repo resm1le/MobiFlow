@@ -61,6 +61,7 @@ class TaskPlan(StrictModel):
     plan_id: str = Field(min_length=1)
     summary: str = Field(min_length=1)
     steps: list[TaskStep] = Field(default_factory=list)
+    behavior_label: str | None = None
 
     @model_validator(mode="after")
     def validate_steps(self) -> "TaskPlan":

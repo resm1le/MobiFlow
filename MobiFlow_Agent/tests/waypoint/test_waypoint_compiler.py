@@ -114,3 +114,8 @@ def test_compiler_writes_path_constraint_into_step():
 def test_compiler_leaves_path_constraint_none_when_absent():
     plan = compile_sequence_to_plan(_sequence())  # _sequence 的 waypoints 无 path_constraint
     assert plan.steps[0].path_constraint is None
+
+
+def test_compiled_plan_carries_behavior_label():
+    plan = compile_sequence_to_plan(_sequence())
+    assert plan.behavior_label == "shopping_checkout"

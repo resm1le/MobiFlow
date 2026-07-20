@@ -35,5 +35,6 @@ def compile_sequence_to_plan(sequence: WaypointSequence) -> TaskPlan:
             f"Waypoint sequence {sequence.sequence_id} "
             f"for behavior {sequence.behavior_label}."
         ),
+        behavior_label=sequence.behavior_label,
         steps=[_compile_step(wp) for wp in sequence.waypoints],
     )
