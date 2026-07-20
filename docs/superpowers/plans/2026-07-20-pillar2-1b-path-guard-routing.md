@@ -42,8 +42,8 @@
 - Test: `tests/task/test_task_step_path_constraint.py`(Create)
 
 **Interfaces:**
-- Consumes: `PathConstraint`(`mobiflow_agent.waypoint.models`)。
-- Produces: `TaskStep.path_constraint: PathConstraint | None = None`(可选,默认 None,向后兼容)。
+- Consumes: `PathConstraint`——**本任务先把它从 `waypoint/models.py` 迁到 `common/contracts.py`**(破环,见 Step 3),`waypoint.models` 保留 re-export。
+- Produces: `TaskStep.path_constraint: PathConstraint | None = None`(可选,默认 None,向后兼容);`common.contracts.PathConstraint` 成为该数据类的规范定义位置。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -89,33 +89,62 @@ def test_task_step_accepts_path_constraint():
 Run: `python -m pytest tests/task/test_task_step_path_constraint.py -q`
 Expected: FAIL —— `TypeError`/`ValidationError`：`TaskStep` 尚无 `path_constraint`（extra="forbid" 会拒绝该关键字）。
 
-- [ ] **Step 3: 改 plan.py**
+- [ ] **Step 3: 先修循环 import —— 把 PathConstraint 迁到 common/contracts.py**
 
-在 `mobiflow_agent/task/plan.py` 顶部 import 区加入(与其它 import 并列):
+> **成因(计划修订):** `task/plan.py` 若直接 `from mobiflow_agent.waypoint.models import PathConstraint`,会先执行 `waypoint/__init__.py`,后者 re-export 了 `compiler`,而 `compiler` import 了 `task/plan` → 成环。解法(经负责人拍板):把纯数据类 `PathConstraint`(仅依赖 `StrictModel`)迁到 `common/contracts.py` 共享契约层,`waypoint/models.py` 改为从 common import 并 re-export(保持 `from mobiflow_agent.waypoint import PathConstraint` 等现有 API 不变)。
+
+(a) 在 `mobiflow_agent/common/contracts.py` 中,`StrictModel` 定义之后的合适位置(与其它 StrictModel 子类并列,例如紧邻 `VerificationCheck` 之前或文件里其它数据模型附近)新增:
 
 ```python
-from mobiflow_agent.waypoint.models import PathConstraint
+class PathConstraint(StrictModel):
+    required_screens: list[str] = Field(default_factory=list)
+    forbidden_actions: list[str] = Field(default_factory=list)
 ```
 
-在 `TaskStep` 类里,`verification_spec: VerificationSpec | None = None` 那一行之后、`policy: TaskStepPolicy | None = None` 之前(或紧邻其后,顺序不影响 pydantic),新增一行:
+(b) 编辑 `mobiflow_agent/waypoint/models.py`:删除原本定义的 `PathConstraint` 类(第 17-19 行那三行 class 定义),改为从 common import 并保留可被 re-export 的名字。把第 9 行的
+```python
+from mobiflow_agent.common.contracts import StrictModel, VerificationSpec
+```
+改为:
+```python
+from mobiflow_agent.common.contracts import PathConstraint, StrictModel, VerificationSpec
+```
+`Waypoint.path_constraint: PathConstraint | None = None` 引用不变(现在指向 common 的同名类)。`waypoint/__init__.py` 对 `PathConstraint` 的 re-export 不变(仍从 `models` 拿,models 已 re-export)。
+
+(c) 验证迁移未破坏 P2-1a:
+Run: `python -m pytest tests/waypoint/ -q`
+Expected: PASS(P2-1a 全部用例仍绿——`from mobiflow_agent.waypoint import PathConstraint` 与 `from ...waypoint.models import PathConstraint` 都仍可用)。
+
+- [ ] **Step 4: 改 plan.py 加字段**
+
+在 `mobiflow_agent/task/plan.py` 顶部 import 区,`PathConstraint` 现在从 common 拿(无环)。若文件已 `from mobiflow_agent.common.contracts import ...`,把 `PathConstraint` 加进该 import 列表;否则新增一行:
+
+```python
+from mobiflow_agent.common.contracts import PathConstraint
+```
+
+在 `TaskStep` 类里,`verification_spec: VerificationSpec | None = None` 之后新增一行:
 
 ```python
     path_constraint: PathConstraint | None = None
 ```
 
-- [ ] **Step 4: 运行确认通过 + 无循环 import**
+- [ ] **Step 5: 运行确认通过 + 无循环 import**
 
 Run: `python -m pytest tests/task/test_task_step_path_constraint.py -q`
-Expected: PASS(2 passed)。若出现 `ImportError`（循环依赖），停止并报告——预期不会发生（`waypoint/models.py` 只依赖 `common.contracts`）。
+Expected: PASS(2 passed)
 
 Run: `python -c "import mobiflow_agent.task.plan; import mobiflow_agent.waypoint"`
-Expected: 无输出、无异常。
+Expected: 无输出、无异常(不再有 ImportError)。
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 全量回归 + 提交**
+
+Run: `python -m pytest -q`
+Expected: 全绿(P2-1a + 新增均通过,无回归)
 
 ```bash
-git add mobiflow_agent/task/plan.py tests/task/test_task_step_path_constraint.py
-git commit -m "feat(task): add optional path_constraint field to TaskStep"
+git add mobiflow_agent/common/contracts.py mobiflow_agent/waypoint/models.py mobiflow_agent/task/plan.py tests/task/test_task_step_path_constraint.py
+git commit -m "feat(task): add optional path_constraint to TaskStep; move PathConstraint to common to break import cycle"
 ```
 
 ---
