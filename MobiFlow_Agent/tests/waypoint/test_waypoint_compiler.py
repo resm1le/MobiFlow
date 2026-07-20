@@ -96,7 +96,7 @@ def _sequence_with_constraint() -> WaypointSequence:
     )
 
 
-def test_compiled_step_does_not_carry_waypoint_only_fields():
+def test_compiled_step_does_not_carry_strength_or_rendezvous():
     plan = compile_sequence_to_plan(_sequence())
     step = plan.steps[0]
     for field_name in ("strength", "rendezvous"):
