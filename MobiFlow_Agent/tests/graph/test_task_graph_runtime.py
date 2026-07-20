@@ -998,3 +998,93 @@ def test_task_harness_service_can_use_task_graph_runtime_for_approval_flow() -> 
     assert resumed.status == TaskHarnessStatus.COMPLETED
     assert resumed.latest_verdict is not None
     assert resumed.latest_verdict.status == VerificationStatus.VERIFIED_SUCCESS
+
+
+def test_task_graph_runtime_off_standard_path_fails_without_recovery() -> None:
+    # 当前屏 = "moments"，required_screens 只允许 "chat"，且 forbidden_actions 含 "post_moment"
+    from mobiflow_agent.waypoint.models import PathConstraint
+    from mobiflow_agent.graph.path_guard import OFF_STANDARD_PATH
+
+    def observe(_session):
+        return ObservationView(
+            observation_id="obs-1",
+            focus_kind=EntityKind.RUN,
+            focus_id="run-123",
+            facts=[
+                ObservationFact(
+                    fact_id="mobile_observation_summary",
+                    source=ObservationFactSource.PLATFORM,
+                    title="Mobile observation summary",
+                    value={"screen_id": "chat"},
+                )
+            ],
+        )
+
+    forbidden_proposal = ExecutionProposal(
+        proposal_id="p-forbidden",
+        action_tool_name="post_moment",
+        arguments={"text": "x"},
+        rationale="advance",
+    )
+
+    def decide(_session):
+        return _step_decision(
+            StepDecisionType.PROPOSE_EXECUTION,
+            "propose",
+            proposal=forbidden_proposal,
+        )
+
+    recovery_calls = {"count": 0}
+
+    def recover(session, failure_verdict):  # 不应被调用
+        recovery_calls["count"] += 1
+        return RecoveryOutcome(
+            summary="should not run",
+            replan_decision=ReplanDecision(
+                decision_type=ReplanDecisionType.RETRY_CURRENT_STEP,
+                summary="noop",
+            ),
+        )
+
+    runtime = TaskGraphRuntime(
+        observer_agent=ObserverAgent(observation_provider=observe),
+        step_policy_agent=StepPolicyAgent(step_policy=decide),
+        verifier_agent=VerifierAgent(),
+        recovery_agent=RecoveryAgent(recovery=recover),
+    )
+
+    session = runtime.create_session(
+        "Post moment from chat (should be blocked as off standard path)",
+        target_kind=EntityKind.RUN,
+        target_id="run-123",
+        verification_spec=_verification_spec(),
+    )
+    # 覆盖 plan:单个 DYNAMIC step,带 path_constraint 与 allowlist 允许 post_moment(以便越过 allowlist 检查、命中 path guard)
+    session.plan = TaskPlan(
+        plan_id="plan:off-path",
+        summary="off-path test",
+        steps=[
+            TaskStep(
+                step_id="only_step",
+                kind=TaskStepKind.DYNAMIC,
+                goal="Do the constrained action.",
+                allowed_side_effects=["post_moment"],
+                verification_target_kind=EntityKind.RUN,
+                verification_target_id="run-123",
+                path_constraint=PathConstraint(
+                    required_screens=["chat"],
+                    forbidden_actions=["post_moment"],
+                ),
+                policy=TaskStepPolicy(policy_id="policy:only", description="Bounded."),
+            )
+        ],
+    )
+
+    completed = runtime.run(session)
+
+    assert completed.status == TaskStatus.FAILED
+    assert completed.completion_verdict == TaskCompletionVerdict.FAILED
+    assert completed.last_execution_result is None
+    assert recovery_calls["count"] == 0
+    assert completed.last_verdict is not None
+    assert completed.last_verdict.blocked_reason == OFF_STANDARD_PATH

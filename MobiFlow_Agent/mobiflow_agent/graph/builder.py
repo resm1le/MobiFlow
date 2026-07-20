@@ -71,7 +71,7 @@ def build_task_orchestration_graph(
     graph.add_conditional_edges(
         "decide_step",
         route_after_decide_step,
-        _step_routes(),
+        {**_step_routes(), "writeback_memory": "writeback_memory"},
     )
     graph.add_conditional_edges(
         "dynamic_execute",

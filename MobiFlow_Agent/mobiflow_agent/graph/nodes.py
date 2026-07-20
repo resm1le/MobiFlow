@@ -4,6 +4,7 @@ from typing import Protocol
 
 from mobiflow_agent.agents.contracts import AgentRole, ReplanDecisionType, StepDecisionType
 from mobiflow_agent.common.contracts import EntityKind, VerificationStatus, VerificationVerdict
+from mobiflow_agent.graph.path_guard import OFF_STANDARD_PATH, evaluate_path_constraint
 from mobiflow_agent.platform.adapter import PlatformAdapterError
 from mobiflow_agent.platform.types import GovernedActionState
 from mobiflow_agent.runtime.state import ConfirmationState
@@ -150,6 +151,11 @@ def decide_step(state: TaskGraphState, ops: TaskGraphOps) -> dict:
             next_role = AgentRole.RECOVERY
             route_hint = "recover"
         else:
+            path_violation = evaluate_path_constraint(
+                session.current_step, session.last_observation, decision.proposal
+            )
+            if path_violation is not None:
+                return _off_standard_path_failure(session, ops, path_violation)
             next_role = AgentRole.EXECUTOR
             route_hint = "dynamic_execute"
     elif decision.decision_type == StepDecisionType.STEP_SUCCEEDED:
@@ -409,6 +415,18 @@ def _dynamic_blocked_verdict(
         evidence_refs=[],
         blocked_reason=blocked_reason,
     )
+
+
+def _off_standard_path_failure(session: TaskSession, ops: TaskGraphOps, reason: str) -> dict:
+    session.last_verdict = _dynamic_blocked_verdict(
+        session,
+        blocked_reason=OFF_STANDARD_PATH,
+        summary=reason,
+    )
+    ops._transition(session, TaskStatus.FAILED)
+    session.completion_verdict = TaskCompletionVerdict.FAILED
+    ops._refresh_session_context(session)
+    return {"session": session, "route_hint": "writeback_memory", "last_error": OFF_STANDARD_PATH}
 
 
 def _route_replan_decision(session: TaskSession, ops: TaskGraphOps, decision_type: ReplanDecisionType) -> dict:
