@@ -8,7 +8,6 @@ from mobiflow_agent.agents.recovery import RecoveryAgent
 from mobiflow_agent.agents.step_policy import StepPolicyAgent
 from mobiflow_agent.agents.verifier import VerifierAgent
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, VerificationSpec
-from mobiflow_agent.waypoint import WaypointSequence, compile_sequence_to_plan
 from mobiflow_agent.common.ids import build_task_session_id
 from mobiflow_agent.control.dispatcher import TaskAgentDispatcher
 from mobiflow_agent.control.policy import TaskControlPolicy
@@ -19,6 +18,7 @@ from mobiflow_agent.runtime.context import ContextCompressionService, ContextHan
 from mobiflow_agent.task.completion import TaskCompletionVerdict
 from mobiflow_agent.task.plan import TaskStatus, TaskStep, TaskStepKind
 from mobiflow_agent.task.session import TaskSession
+from mobiflow_agent.waypoint import WaypointSequence, compile_sequence_to_plan
 
 from .support_types import SupportHook
 
