@@ -66,3 +66,16 @@ def test_compiled_steps_are_dynamic_with_policy_and_arrival_spec():
 def test_compiled_plan_summary_mentions_behavior_label():
     plan = compile_sequence_to_plan(_sequence())
     assert "shopping_checkout" in plan.summary
+
+
+def test_compiled_step_policy_id_follows_waypoint_convention():
+    plan = compile_sequence_to_plan(_sequence())
+    assert plan.steps[0].policy.policy_id == "policy:logged_in"
+    assert plan.steps[1].policy.policy_id == "policy:ordered"
+
+
+def test_compiled_step_does_not_carry_waypoint_only_fields():
+    plan = compile_sequence_to_plan(_sequence())
+    step = plan.steps[0]
+    for field_name in ("strength", "path_constraint", "rendezvous"):
+        assert not hasattr(step, field_name)
