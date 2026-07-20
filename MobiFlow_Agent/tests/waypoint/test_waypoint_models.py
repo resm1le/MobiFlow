@@ -58,9 +58,10 @@ def test_strict_waypoint_carries_path_constraint():
     )
     assert wp.strength == WaypointStrength.STRICT
     assert wp.path_constraint.required_screens == ["chat", "call_dialog"]
+    assert wp.path_constraint.forbidden_actions == ["search"]
 
 
-def test_rendezvous_is_optional_and_ignored_field():
+def test_rendezvous_is_optional_and_stored():
     wp = Waypoint(
         waypoint_id="call_started",
         description="Start a call.",

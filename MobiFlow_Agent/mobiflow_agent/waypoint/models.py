@@ -39,7 +39,7 @@ class WaypointSequence(StrictModel):
     sequence_id: str = Field(min_length=1)
     behavior_label: str = Field(min_length=1)
     profile_package: str = Field(min_length=1)
-    waypoints: list[Waypoint] = Field(default_factory=list)
+    waypoints: list[Waypoint]
 
     @model_validator(mode="after")
     def validate_waypoints(self) -> "WaypointSequence":
