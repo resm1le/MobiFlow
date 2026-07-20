@@ -8,6 +8,7 @@ from mobiflow_agent.agents.recovery import RecoveryAgent
 from mobiflow_agent.agents.step_policy import StepPolicyAgent
 from mobiflow_agent.agents.verifier import VerifierAgent
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, VerificationSpec
+from mobiflow_agent.waypoint import WaypointSequence, compile_sequence_to_plan
 from mobiflow_agent.common.ids import build_task_session_id
 from mobiflow_agent.control.dispatcher import TaskAgentDispatcher
 from mobiflow_agent.control.policy import TaskControlPolicy
@@ -80,6 +81,7 @@ class TaskGraphSessionSupportMixin:
         verification_spec: VerificationSpec | None = None,
         session_id: str | None = None,
         handoff: ContextHandoff | None = None,
+        waypoint_sequence: WaypointSequence | None = None,
     ) -> TaskSession:
         session = TaskSession(
             session_id=session_id or build_task_session_id(),
@@ -89,6 +91,8 @@ class TaskGraphSessionSupportMixin:
             initial_proposal=proposal,
             initial_verification_spec=verification_spec,
         )
+        if waypoint_sequence is not None:
+            session.plan = compile_sequence_to_plan(waypoint_sequence)
         if handoff is not None:
             self.apply_context_handoff(session, handoff)
         return session

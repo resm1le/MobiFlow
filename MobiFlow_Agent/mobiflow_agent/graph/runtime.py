@@ -16,6 +16,7 @@ from mobiflow_agent.model.runtime import ModelRegistry
 from mobiflow_agent.runtime.context import ContextCompressionService, ContextHandoff
 from mobiflow_agent.task.plan import TaskStatus
 from mobiflow_agent.task.session import TaskSession
+from mobiflow_agent.waypoint import WaypointSequence
 
 from .builder import build_task_orchestration_graph
 from .state import TaskGraphState
@@ -68,6 +69,7 @@ class TaskGraphRuntime(TaskGraphSupport):
         verification_spec: VerificationSpec | None = None,
         session_id: str | None = None,
         handoff: ContextHandoff | None = None,
+        waypoint_sequence: WaypointSequence | None = None,
     ) -> TaskSession:
         return super().create_session(
             goal,
@@ -77,6 +79,7 @@ class TaskGraphRuntime(TaskGraphSupport):
             verification_spec=verification_spec,
             session_id=session_id,
             handoff=handoff,
+            waypoint_sequence=waypoint_sequence,
         )
 
     def run(self, session: TaskSession, *, config: dict[str, Any] | None = None) -> TaskSession:
