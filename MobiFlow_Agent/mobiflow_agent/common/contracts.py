@@ -163,6 +163,11 @@ class ExecutionProposal(StrictModel):
         return self
 
 
+class PathConstraint(StrictModel):
+    required_screens: list[str] = Field(default_factory=list)
+    forbidden_actions: list[str] = Field(default_factory=list)
+
+
 class VerificationCheck(StrictModel):
     check_id: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -251,6 +256,7 @@ __all__ = [
     "ObservationFactSource",
     "ObservationInference",
     "ObservationView",
+    "PathConstraint",
     "StrictModel",
     "SuccessCriterion",
     "TaskConstraint",

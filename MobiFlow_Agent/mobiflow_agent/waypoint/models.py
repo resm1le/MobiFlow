@@ -6,17 +6,12 @@ from enum import Enum
 
 from pydantic import Field, model_validator
 
-from mobiflow_agent.common.contracts import StrictModel, VerificationSpec
+from mobiflow_agent.common.contracts import PathConstraint, StrictModel, VerificationSpec
 
 
 class WaypointStrength(str, Enum):
     COMMONSENSE = "commonsense"
     STRICT = "strict"
-
-
-class PathConstraint(StrictModel):
-    required_screens: list[str] = Field(default_factory=list)
-    forbidden_actions: list[str] = Field(default_factory=list)
 
 
 class RendezvousSpec(StrictModel):

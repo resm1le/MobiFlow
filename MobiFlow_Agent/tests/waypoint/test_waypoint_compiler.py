@@ -77,5 +77,5 @@ def test_compiled_step_policy_id_follows_waypoint_convention():
 def test_compiled_step_does_not_carry_waypoint_only_fields():
     plan = compile_sequence_to_plan(_sequence())
     step = plan.steps[0]
-    for field_name in ("strength", "path_constraint", "rendezvous"):
+    for field_name in ("strength", "rendezvous"):
         assert not hasattr(step, field_name)

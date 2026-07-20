@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import Field, model_validator
 
-from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, StrictModel, VerificationSpec
+from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, PathConstraint, StrictModel, VerificationSpec
 
 
 class TaskStatus(str, Enum):
@@ -43,6 +43,7 @@ class TaskStep(StrictModel):
     allowed_side_effects: list[str] = Field(default_factory=list)
     proposal: ExecutionProposal | None = None
     verification_spec: VerificationSpec | None = None
+    path_constraint: PathConstraint | None = None
     policy: TaskStepPolicy | None = None
 
     @model_validator(mode="after")
