@@ -19,6 +19,7 @@ def _compile_step(waypoint: Waypoint) -> TaskStep:
         goal=waypoint.description,
         allowed_side_effects=[],
         verification_spec=waypoint.arrival_spec,
+        path_constraint=waypoint.path_constraint,
         policy=TaskStepPolicy(
             policy_id=f"policy:{waypoint.waypoint_id}",
             description=f"Bounded actions to reach waypoint {waypoint.waypoint_id}.",

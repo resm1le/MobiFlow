@@ -5,8 +5,10 @@ from mobiflow_agent.common.contracts import (
 )
 from mobiflow_agent.task.plan import TaskPlan, TaskStepKind
 from mobiflow_agent.waypoint import (
+    PathConstraint,
     Waypoint,
     WaypointSequence,
+    WaypointStrength,
     compile_sequence_to_plan,
 )
 
@@ -74,8 +76,41 @@ def test_compiled_step_policy_id_follows_waypoint_convention():
     assert plan.steps[1].policy.policy_id == "policy:ordered"
 
 
+def _sequence_with_constraint() -> WaypointSequence:
+    return WaypointSequence(
+        sequence_id="wechat.video_call.v1",
+        behavior_label="wechat_video_call",
+        profile_package="com.tencent.mm",
+        waypoints=[
+            Waypoint(
+                waypoint_id="call_connected",
+                description="Reach connected call.",
+                arrival_spec=_arrival_spec("call_connected"),
+                strength=WaypointStrength.STRICT,
+                path_constraint=PathConstraint(
+                    required_screens=["chat", "call_dialog"],
+                    forbidden_actions=["search"],
+                ),
+            )
+        ],
+    )
+
+
 def test_compiled_step_does_not_carry_waypoint_only_fields():
     plan = compile_sequence_to_plan(_sequence())
     step = plan.steps[0]
     for field_name in ("strength", "rendezvous"):
         assert not hasattr(step, field_name)
+
+
+def test_compiler_writes_path_constraint_into_step():
+    plan = compile_sequence_to_plan(_sequence_with_constraint())
+    step = plan.steps[0]
+    assert step.path_constraint is not None
+    assert step.path_constraint.required_screens == ["chat", "call_dialog"]
+    assert step.path_constraint.forbidden_actions == ["search"]
+
+
+def test_compiler_leaves_path_constraint_none_when_absent():
+    plan = compile_sequence_to_plan(_sequence())  # _sequence 的 waypoints 无 path_constraint
+    assert plan.steps[0].path_constraint is None
