@@ -120,6 +120,21 @@ Creation uses normal explicit approval. For mixed profiles the run-level
 `profilePackage` is null and the run-level `taskPayload` is `{}`; each target's
 current task is authoritative.
 
+The standard P2-3b Agent flow first reads `list_devices` and
+`get_run_planning_catalog`, maps a bounded `CollectionIntent` to a typed
+`DispatchPlan`, and resolves every complete `.vN` sequence ID from the Agent's
+catalog. Its deterministic compiler supplies the full sequence payload and
+Platform default run/artifact policy. The resulting underlying
+`create_heterogeneous_run` action is submitted through
+`propose_governed_action`; a direct `create_heterogeneous_run` adapter call is
+not the Agent's standard entry point.
+
+Inventory state used during compilation is advisory. It does not reserve a
+device or guarantee tag capacity. After explicit approval, Platform performs
+the authoritative identity, availability, de-duplication, and capacity checks
+while creating the run. An `approval_required` response therefore means a
+confirmation is pending, not that the run has already been created.
+
 The same operation is available to operators as `POST /api/runs/heterogeneous`.
 
 ### Waypoint Evidence

@@ -40,6 +40,7 @@ natural language task
 - Scenario regression suite grouped by normal, recovery, approval, fixed-script contrast, and memory capabilities, with report export.
 - `TaskIntakeService` and `TaskInterpreter` for converting bounded natural-language mobile goals into validated dynamic task sessions.
 - Versioned `SequenceCatalog` resolution and model-assisted, human-reviewed `SequenceDraftService` waypoint drafts.
+- Governed heterogeneous collection dispatch from bounded natural language or a typed `DispatchPlan`.
 
 ## Package Responsibilities
 
@@ -56,6 +57,7 @@ mobiflow_agent/
   model/        provider-agnostic generation and embedding runtime
   control/      dispatcher, policy, and compatibility imports
   waypoint/     waypoint models, compiler, packaged sequence catalog, and drafting service
+  collection/   bounded intent planning, dispatch validation/compilation, and governed submission
   common/       canonical contracts and id helpers
 ```
 
@@ -130,7 +132,28 @@ result = draft_service.draft_sequence(
 )
 ```
 
-`SequenceCatalog` is a deterministic, read-only view of versioned JSON resources packaged with the Agent. Every resolve returns a deep copy, so caller mutation cannot change the catalog. `SequenceDraftService` requires a configured model runtime and reuses intake parsing plus per-waypoint assertion synthesis. A ready result is still only a draft: it must be reviewed and added as a versioned JSON file through normal code review. Drafting never writes the catalog, creates a session or run, calls Platform tools, or performs device actions. Heterogeneous run creation remains a P2-3b concern and continues to require Platform approval.
+`SequenceCatalog` is a deterministic, read-only view of versioned JSON resources packaged with the Agent. Every resolve returns a deep copy, so caller mutation cannot change the catalog. `SequenceDraftService` requires a configured model runtime and reuses intake parsing plus per-waypoint assertion synthesis. A ready result is still only a draft: it must be reviewed and added as a versioned JSON file through normal code review. Drafting never writes the catalog, creates a session or run, calls Platform tools, or performs device actions.
+
+## Governed Collection Dispatch
+
+```python
+from mobiflow_agent.collection import CollectionIntent
+
+intent = CollectionIntent(
+    raw_text="Run 3 text-chat collections on android13 devices.",
+    labels=["pcap"],
+)
+
+# Read-only: discovery, bounded model planning, and deterministic compilation.
+prepared = service.plan_intent(intent, caller_context)
+
+# Submits the compiled create_heterogeneous_run proposal through Platform governance.
+submitted = service.submit_intent(intent, caller_context)
+```
+
+`CollectionDispatchService` refreshes `list_devices` and `get_run_planning_catalog` on every call, resolves each versioned sequence from the Agent catalog, and compiles a complete P2-2 payload. It never calls `create_heterogeneous_run` directly. `submit_intent` passes the underlying action through `propose_governed_action`; `submit_plan` provides the same governed path for an already structured plan and cannot bypass compiler validation.
+
+`submitted.status == CollectionDispatchStatus.APPROVAL_REQUIRED` is an expected governance state—not a failure and not evidence that a run exists. The caller must display the returned confirmation details and pass the user's explicit decision to the existing Platform adapter `resolve_approval(...)` method. The collection service does not auto-approve confirmations. Device availability and tag-capacity warnings describe a discovery snapshot only; Platform validates and reserves devices authoritatively after approval.
 
 ## Scenario Regression Suite
 

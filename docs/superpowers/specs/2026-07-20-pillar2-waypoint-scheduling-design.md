@@ -106,7 +106,7 @@ MobiFlow 是流量采集研究的「移动端行为生成与调度引擎」:用 
 定义**对话入口契约(需求 1)**,不实现 UI:
 
 ```
-CollectionIntent(自然语言) → IntentPlanner(Agent) → DispatchPlan → MCP
+CollectionIntent(自然语言) → IntentPlanner(Agent) → DispatchPlan → DispatchPlanCompiler → governed proposal → MCP
 ```
 
 `IntentPlanner` 输出 `DispatchPlan`。**DispatchPlan 必须有显式 schema 与非法输入契约**(Review 要求,否则无法据以实现):
@@ -120,14 +120,16 @@ DispatchEntry:
   select: DeviceSelector          # 二选一:{count:int>0, required_tags?, excluded_tags?} 或 {device_ids: [str] 非空}
 ```
 
-非法输入处理(在 Agent 侧编译期拒绝,不下发 MCP):`sequence_id` 无法解析、`select` 两种模式混用或都空、`count<=0`、`device_ids` 含未注册设备 → 返回结构化错误给对话层,不建 run。NL → `sequence_id`/`select` 的映射由 `IntentPlanner` 负责,本轮可先支持"显式点名序列 + 显式设备条件"的受限自然语言,复杂 NL 解析后置。
+非法输入处理(在 Agent 侧编译期拒绝,不下发 MCP):`sequence_id` 无法解析、`select` 两种模式混用或都空、`count<=0`、`device_ids` 含未注册设备 → 返回结构化错误给对话层,不建 run。NL → `sequence_id`/`select` 的映射由 `IntentPlanner` 负责；P2-3b 已落地"显式点名序列 + 显式设备条件"的受限自然语言，复杂 NL 解析后置。
 
 落地调用序列:
 
-1. `list_devices` / `list_device_pools`(现有)——寻址候选。
-2. Agent `SequenceCatalog.resolve_sequence`(**新增,确定性只读**):按完整版本 `sequence_id` 取正式序列定义。Platform 不复制目录或 Pydantic schema。
-3. `create_heterogeneous_run`(**新增,side_effect + explicit 确认**):复用现有 confirmation token 机制。
-4. `observe_run` / `get_run_target`(现有)——回报进度。
+1. `list_devices` + `get_run_planning_catalog`(现有)——获取设备快照、profile 能力与 Platform 默认 run/artifact policy；快照不是 reservation。
+2. Agent `SequenceCatalog.resolve_sequence`(**已实现,确定性只读**):按完整版本 `sequence_id` 取正式序列定义。Platform 不复制目录或 Pydantic schema。
+3. Agent `DispatchPlanCompiler`(**已实现**):校验 sequence/profile/device identity，并构造完整 `sequenceId + profilePackage + taskPayload + select`。
+4. `propose_governed_action(actionToolName=create_heterogeneous_run)`(**已实现,side_effect + explicit 确认**):标准 Agent 入口统一复用 confirmation token；不新增 direct action adapter。
+5. Platform 在批准执行时重新权威校验设备可用性、去重与容量，随后才创建 run。
+6. `observe_run` / `get_run_target`(现有)——回报进度。
 
 对话入口本轮以"Agent 编程接口 + Platform MCP 工具"呈现;UI 只是该接口的一个前端,预留、不做。若未来需要远程暴露 `resolve_sequence`/`draft_sequence`,只能增加指向 Agent 服务的薄代理,不能让 Platform 成为第二份序列权威。
 
@@ -201,6 +203,7 @@ DispatchEntry:
 - `AI_Mobile_Executor_Platform/services/executor-control-service/src/main/java/com/example/platform/control/domain/PersistenceModels.java` — `ExperimentRunTargetEntity` 增 `sequenceId`、task payload per-target
 - `MobiFlow_Agent/mobiflow_agent/waypoint/catalog.py` 与 `waypoint/sequences/*.json` — Agent 唯一权威的确定性版本化序列目录与 `resolve_sequence`
 - `MobiFlow_Agent/mobiflow_agent/waypoint/drafting.py` — 只读 `draft_sequence`、航点分解与逐航点 assertion synthesis
+- `MobiFlow_Agent/mobiflow_agent/collection/` — P2-3b 的受限意图规划、typed discovery capability、确定性 proposal 编译与治理提交
 - `MobiFlow_Agent/mobiflow_agent/common/contracts.py` — 航点序列模型复用/扩展 `VerificationSpec`
 - `MobiFlow_Agent/mobiflow_agent/graph/builder.py` 与 `MobiFlow_Agent/mobiflow_agent/runtime/trace_export.py` — 铺路/失败判定闭环 + 航点级 timeline 导出
 - `MobiFlow_Agent/mobiflow_agent/graph/nodes.py` — `decide_step` 路由(`:114-178`,`allowed_side_effects` allowlist `:144`,`off_standard_path` 终态出口)
