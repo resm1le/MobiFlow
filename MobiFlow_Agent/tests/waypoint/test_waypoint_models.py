@@ -48,7 +48,17 @@ def test_waypoint_defaults_to_commonsense_and_no_constraint():
 
 def test_waypoint_allowed_actions_defaults_to_full_mobile_set():
     wp = _waypoint("logged_in")
-    assert wp.allowed_actions == DEFAULT_MOBILE_ACTIONS
+    assert wp.allowed_actions == list(DEFAULT_MOBILE_ACTIONS)
+
+
+def test_waypoint_allowed_action_defaults_are_isolated():
+    first = _waypoint("first")
+    second = _waypoint("second")
+
+    first.allowed_actions.append("mobile.first_only")
+
+    assert "mobile.first_only" not in second.allowed_actions
+    assert "mobile.first_only" not in DEFAULT_MOBILE_ACTIONS
 
 
 def test_waypoint_allowed_actions_can_be_narrowed():

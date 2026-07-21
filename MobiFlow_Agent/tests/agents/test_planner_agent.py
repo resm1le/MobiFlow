@@ -134,6 +134,29 @@ def test_planner_agent_fallback_always_generates_dynamic_step_for_plain_goal() -
     assert plan.steps[0].policy is not None
 
 
+def test_planner_fallback_action_lists_are_isolated_from_defaults() -> None:
+    _, plan, _ = PlannerAgent().plan(
+        session_id="session-1",
+        goal="Navigate using bounded mobile actions.",
+        target_kind=EntityKind.TASK,
+        target_id="task-1",
+        session=TaskSession(
+            session_id="session-1",
+            goal="Navigate using bounded mobile actions.",
+            target_kind=EntityKind.TASK,
+            target_id="task-1",
+        ),
+    )
+    step = plan.steps[0]
+    assert step.policy is not None
+    assert step.allowed_side_effects is not step.policy.action_hints
+
+    step.allowed_side_effects.append("mobile.step_only")
+
+    assert "mobile.step_only" not in PlannerAgent.DEFAULT_DYNAMIC_SIDE_EFFECTS
+    assert "mobile.step_only" not in step.policy.action_hints
+
+
 def test_planner_agent_raises_when_model_output_is_invalid() -> None:
     runtime = ModelRuntime(
         ModelRegistry(

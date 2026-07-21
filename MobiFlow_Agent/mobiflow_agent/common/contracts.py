@@ -6,13 +6,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-DEFAULT_MOBILE_ACTIONS = [
+DEFAULT_MOBILE_ACTIONS: tuple[str, ...] = (
     "mobile.launch",
     "mobile.tap",
     "mobile.input_text",
     "mobile.wait",
     "mobile.back",
-]
+)
 
 
 class StrictModel(BaseModel):

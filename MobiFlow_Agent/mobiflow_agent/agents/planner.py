@@ -160,14 +160,22 @@ class PlannerAgent:
                 expected_outputs=["observation", "step_decision", "verification_verdict"],
                 verification_target_kind=target_kind,
                 verification_target_id=target_id,
-                allowed_side_effects=[proposal.action_tool_name] if proposal is not None else self.DEFAULT_DYNAMIC_SIDE_EFFECTS,
+                allowed_side_effects=(
+                    [proposal.action_tool_name]
+                    if proposal is not None
+                    else list(self.DEFAULT_DYNAMIC_SIDE_EFFECTS)
+                ),
                 proposal=proposal,
                 verification_spec=verification_spec,
                 policy=TaskStepPolicy(
                     policy_id="dynamic-mobile-step-policy",
                     description="Observe the active target, choose bounded actions, and stop for verification.",
                     max_iterations=8,
-                    action_hints=[proposal.action_tool_name] if proposal is not None else self.DEFAULT_DYNAMIC_SIDE_EFFECTS,
+                    action_hints=(
+                        [proposal.action_tool_name]
+                        if proposal is not None
+                        else list(self.DEFAULT_DYNAMIC_SIDE_EFFECTS)
+                    ),
                 ),
             )
         ]

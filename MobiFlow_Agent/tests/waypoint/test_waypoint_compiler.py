@@ -68,7 +68,7 @@ def test_compiled_steps_are_dynamic_with_policy_and_arrival_spec():
 
 def test_compiled_step_allowed_side_effects_from_waypoint_default():
     plan = compile_sequence_to_plan(_sequence())
-    assert plan.steps[0].allowed_side_effects == DEFAULT_MOBILE_ACTIONS
+    assert plan.steps[0].allowed_side_effects == list(DEFAULT_MOBILE_ACTIONS)
 
 
 def test_compiled_step_allowed_side_effects_narrowed():
@@ -87,6 +87,15 @@ def test_compiled_step_allowed_side_effects_narrowed():
     )
     plan = compile_sequence_to_plan(sequence)
     assert plan.steps[0].allowed_side_effects == ["mobile.tap"]
+
+
+def test_compiled_step_actions_are_isolated_from_source_waypoint():
+    sequence = _sequence()
+    plan = compile_sequence_to_plan(sequence)
+
+    plan.steps[0].allowed_side_effects.append("mobile.step_only")
+
+    assert "mobile.step_only" not in sequence.waypoints[0].allowed_actions
 
 
 def test_compiled_plan_summary_mentions_behavior_label():
