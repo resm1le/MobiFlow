@@ -2,16 +2,32 @@ package com.example.platform.control.application;
 
 import com.example.platform.control.api.AdminApiModels;
 import com.example.platform.control.api.ExecutorApiModels;
+import com.example.platform.control.api.McpApiModels;
 import com.example.platform.control.api.ToolApiModels;
+import com.example.platform.control.domain.DomainValues;
+import com.example.platform.control.domain.PersistenceModels.ExperimentRunTargetEntity;
 import com.example.platform.control.domain.PersistenceModels.ToolConfirmationTokenEntity;
 import com.example.platform.control.domain.PersistenceModels.ToolExecutionAuditEntity;
+import com.example.platform.control.domain.PersistenceModels.RunEventEntity;
+import com.example.platform.control.domain.PersistenceModels.TaskAttemptEntity;
+import com.example.platform.control.domain.PersistenceModels.TaskEntity;
+import com.example.platform.control.infrastructure.mapper.ArtifactMapper;
+import com.example.platform.control.infrastructure.mapper.DeviceCommandMapper;
+import com.example.platform.control.infrastructure.mapper.DeviceMapper;
+import com.example.platform.control.infrastructure.mapper.DeviceRuntimeStateMapper;
+import com.example.platform.control.infrastructure.mapper.ExperimentRunTargetMapper;
+import com.example.platform.control.infrastructure.mapper.RunEventMapper;
+import com.example.platform.control.infrastructure.mapper.TaskAttemptMapper;
+import com.example.platform.control.infrastructure.mapper.TaskMapper;
 import com.example.platform.control.infrastructure.mapper.ToolConfirmationTokenMapper;
 import com.example.platform.control.infrastructure.mapper.ToolExecutionAuditMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class ToolFacadeServiceTest {
@@ -36,6 +53,7 @@ class ToolFacadeServiceTest {
     private AiFailureTriageService aiFailureTriageService;
     private RunPlanningContextBuilder runPlanningContextBuilder;
     private ToolResourceService toolResourceService;
+    private WaypointTimelineService waypointTimelineService;
     private ToolExecutionAuditMapper toolExecutionAuditMapper;
     private ToolConfirmationTokenMapper toolConfirmationTokenMapper;
     private ToolFacadeService toolFacadeService;
@@ -53,6 +71,7 @@ class ToolFacadeServiceTest {
         aiFailureTriageService = Mockito.mock(AiFailureTriageService.class);
         runPlanningContextBuilder = Mockito.mock(RunPlanningContextBuilder.class);
         toolResourceService = Mockito.mock(ToolResourceService.class);
+        waypointTimelineService = Mockito.mock(WaypointTimelineService.class);
         toolExecutionAuditMapper = Mockito.mock(ToolExecutionAuditMapper.class);
         toolConfirmationTokenMapper = Mockito.mock(ToolConfirmationTokenMapper.class);
 
@@ -118,6 +137,7 @@ class ToolFacadeServiceTest {
                 aiFailureTriageService,
                 runPlanningContextBuilder,
                 toolResourceService,
+                waypointTimelineService,
                 new IdGenerator(),
                 new JsonCodec(new ObjectMapper()),
                 new ObjectMapper(),
@@ -152,6 +172,21 @@ class ToolFacadeServiceTest {
                         && item.toolKind().equals("read")
                         && !item.governance().requiresApproval()
         ));
+        ToolApiModels.ToolCatalogItem heterogeneous = response.tools().stream()
+                .filter(item -> item.name().equals("create_heterogeneous_run"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("side_effect", heterogeneous.toolKind());
+        assertEquals("EXECUTION", heterogeneous.riskLevel());
+        assertTrue(heterogeneous.governance().requiresApproval());
+        ToolApiModels.ToolCatalogItem timeline = response.tools().stream()
+                .filter(item -> item.name().equals("record_waypoint_segments"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("side_effect", timeline.toolKind());
+        assertEquals("ADVISORY", timeline.riskLevel());
+        assertFalse(timeline.governance().requiresApproval());
+        assertTrue(timeline.semanticTags().contains("idempotent"));
     }
 
     @Test
@@ -212,6 +247,231 @@ class ToolFacadeServiceTest {
         assertNotNull(response.confirmation());
         assertNotNull(response.audit());
         verify(experimentRunService, never()).createSingleDeviceRun(any());
+    }
+
+    @Test
+    void heterogeneousRunRequiresApprovalBeforeCreation() {
+        ToolApiModels.ExecuteToolResponse response = toolFacadeService.execute(executeRequest(
+                "req-heterogeneous-1",
+                "create_heterogeneous_run",
+                Map.of(
+                        "name", "mixed",
+                        "taskType", "PLUGIN_RUN",
+                        "runConfig", Map.of(
+                                "loopCount", 1,
+                                "budgetMs", 60_000,
+                                "loopIntervalMs", 0,
+                                "networkIsolationEnabled", false,
+                                "pollIntervalMs", 15_000,
+                                "heartbeatIntervalMs", 30_000
+                        ),
+                        "artifactPolicy", Map.of(
+                                "uploadLog", true,
+                                "uploadScreenshot", true,
+                                "uploadDump", true
+                        ),
+                        "dispatch", List.of(Map.of(
+                                "sequenceId", "wechat.text_chat.v1",
+                                "profilePackage", "com.tencent.mm",
+                                "taskPayload", Map.of("goal", "run", "waypoint_sequence", Map.of()),
+                                "select", Map.of("deviceIds", List.of("device-1"))
+                        ))
+                )
+        ));
+
+        assertEquals("approval_required", response.status());
+        verify(experimentRunService, never()).createHeterogeneousRun(any());
+    }
+
+    @Test
+    void recordWaypointSegmentsCompletesWithoutApprovalAndReplaysIdempotently() {
+        RunEventEntity event = new RunEventEntity();
+        event.setAttemptId("attempt-1");
+        event.setTaskId("task-1");
+        event.setDeviceId("device-1");
+        event.setRunId("run-1");
+        event.setEventType("WAYPOINT_SEGMENT");
+        event.setState("COMPLETE");
+        event.setMessage("waypoint_segment:0:COMPLETE");
+        event.setPayloadJson("{\"step_id\":\"logged_in\"}");
+        event.setTs(1_500);
+        when(waypointTimelineService.record(any(), any(), any())).thenReturn(List.of(event));
+        Map<String, Object> arguments = Map.of(
+                "runTargetId", "target-1",
+                "attemptId", "attempt-1",
+                "waypointSegments", List.of(Map.of(
+                        "step_id", "logged_in",
+                        "behavior_label", "wechat_text_chat",
+                        "entered_at_ms", 1_000,
+                        "arrived_at_ms", 1_500,
+                        "dwell_ms", 500
+                ))
+        );
+
+        ToolApiModels.ExecuteToolResponse first = toolFacadeService.execute(executeRequest(
+                "req-timeline-1", "record_waypoint_segments", arguments));
+        ToolApiModels.ExecuteToolResponse replay = toolFacadeService.execute(executeRequest(
+                "req-timeline-1", "record_waypoint_segments", arguments));
+
+        assertEquals("completed", first.status());
+        assertNull(first.confirmation());
+        assertEquals("target-1", first.entityRefs().runTargetId());
+        assertEquals("attempt-1", first.entityRefs().attemptId());
+        assertEquals("completed", replay.status());
+        assertEquals("target-1", ((Map<?, ?>) replay.result()).get("runTargetId"));
+        assertEquals("attempt-1", ((Map<?, ?>) replay.result()).get("attemptId"));
+        verify(waypointTimelineService, times(1)).record(any(), any(), any());
+    }
+
+    @Test
+    void recordWaypointSegmentsRejectsMissingOrAdditionalRawFieldsBeforeServiceCall() {
+        Map<String, Object> missingTiming = Map.of(
+                "step_id", "logged_in",
+                "behavior_label", "wechat_text_chat"
+        );
+        Map<String, Object> forgedIdentity = new LinkedHashMap<>();
+        forgedIdentity.put("step_id", "logged_in");
+        forgedIdentity.put("behavior_label", "wechat_text_chat");
+        forgedIdentity.put("entered_at_ms", 1_000);
+        forgedIdentity.put("arrived_at_ms", 1_500);
+        forgedIdentity.put("dwell_ms", 500);
+        forgedIdentity.put("deviceId", "forged-device");
+
+        ToolApiModels.ExecuteToolResponse missing = toolFacadeService.execute(executeRequest(
+                "req-timeline-missing",
+                "record_waypoint_segments",
+                Map.of("runTargetId", "target-1", "attemptId", "attempt-1", "waypointSegments", List.of(missingTiming))
+        ));
+        ToolApiModels.ExecuteToolResponse extra = toolFacadeService.execute(executeRequest(
+                "req-timeline-extra",
+                "record_waypoint_segments",
+                Map.of("runTargetId", "target-1", "attemptId", "attempt-1", "waypointSegments", List.of(forgedIdentity))
+        ));
+
+        assertEquals("failed", missing.status());
+        assertEquals("failed", extra.status());
+        verify(waypointTimelineService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void fixedP2_1dFixtureRoundTripsThroughMcpTimelinePersistenceAndAdminQuery() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonCodec codec = new JsonCodec(mapper);
+        List<Map<String, Object>> fixture;
+        try (InputStream input = getClass().getResourceAsStream("/contracts/p2-1d-waypoint-segments.json")) {
+            assertNotNull(input);
+            fixture = mapper.readValue(input, new TypeReference<>() { });
+        }
+
+        TaskAttemptMapper attemptMapper = Mockito.mock(TaskAttemptMapper.class);
+        TaskMapper taskMapper = Mockito.mock(TaskMapper.class);
+        ExperimentRunTargetMapper targetMapper = Mockito.mock(ExperimentRunTargetMapper.class);
+        RunEventMapper eventMapper = Mockito.mock(RunEventMapper.class);
+        List<RunEventEntity> persisted = new java.util.ArrayList<>();
+        TaskAttemptEntity attempt = new TaskAttemptEntity();
+        attempt.setAttemptId("attempt-1");
+        attempt.setTaskId("task-1");
+        attempt.setDeviceId("device-1");
+        attempt.setRunId("run-1");
+        attempt.setStatus(DomainValues.ATTEMPT_STATUS_SUCCEEDED);
+        TaskEntity task = new TaskEntity();
+        task.setTaskId("task-1");
+        task.setRunId("run-1");
+        task.setRunTargetId("target-1");
+        task.setTargetDeviceId("device-1");
+        task.setTaskPayloadJson(codec.write(Map.of(
+                "goal", "run fixture",
+                "waypoint_sequence", Map.of(
+                        "sequence_id", "wechat.text_chat.v1",
+                        "behavior_label", "wechat_text_chat",
+                        "waypoints", List.of(
+                                Map.of("waypoint_id", "logged_in"),
+                                Map.of("waypoint_id", "message_sent")
+                        )
+                )
+        )));
+        ExperimentRunTargetEntity target = new ExperimentRunTargetEntity();
+        target.setRunTargetId("target-1");
+        target.setRunId("run-1");
+        target.setDeviceId("device-1");
+        target.setSequenceId("wechat.text_chat.v1");
+        when(attemptMapper.lockById("attempt-1")).thenReturn(attempt);
+        when(attemptMapper.findById("attempt-1")).thenReturn(attempt);
+        when(taskMapper.findById("task-1")).thenReturn(task);
+        when(targetMapper.findById("target-1")).thenReturn(target);
+        when(eventMapper.findByAttemptIdAndEventKeys(any(), any())).thenAnswer(invocation -> List.copyOf(persisted));
+        when(eventMapper.findByAttemptId("attempt-1")).thenAnswer(invocation -> List.copyOf(persisted));
+        doAnswer(invocation -> {
+            persisted.addAll(invocation.getArgument(0));
+            return null;
+        }).when(eventMapper).insertBatchNoMutation(any());
+
+        WaypointTimelineService realTimeline = new WaypointTimelineService(
+                attemptMapper, taskMapper, targetMapper, eventMapper, codec);
+        AdminApiService realAdmin = new AdminApiService(
+                Mockito.mock(DeviceMapper.class),
+                Mockito.mock(DeviceRuntimeStateMapper.class),
+                taskMapper,
+                attemptMapper,
+                Mockito.mock(DeviceCommandMapper.class),
+                eventMapper,
+                Mockito.mock(ArtifactMapper.class),
+                Mockito.mock(ArtifactObjectStore.class),
+                codec,
+                new IdGenerator(),
+                new ControlStateRules(),
+                new TaskRequestValidator(),
+                experimentRunService
+        );
+        ToolFacadeService realToolFacade = new ToolFacadeService(
+                realAdmin, experimentRunService, aiRunPlanningService, aiRunSummaryService,
+                aiFailureTriageService, runPlanningContextBuilder, toolResourceService, realTimeline,
+                new IdGenerator(), codec, mapper, toolExecutionAuditMapper, toolConfirmationTokenMapper,
+                new ControlProperties()
+        );
+        McpFacadeService mcp = new McpFacadeService(realToolFacade, toolResourceService, mapper);
+
+        var response = mcp.handle(new McpApiModels.JsonRpcRequest(
+                "2.0", "fixture-call", "tools/call", Map.of(
+                        "name", "record_waypoint_segments",
+                        "requestId", "fixture-request",
+                        "sessionId", "fixture-session",
+                        "arguments", Map.of(
+                                "runTargetId", "target-1",
+                                "attemptId", "attempt-1",
+                                "waypointSegments", fixture
+                        ),
+                        "callerContext", Map.of(
+                                "agentTaskId", "agent-task-1",
+                                "turnId", "turn-1",
+                                "stepId", "step-1"
+                        )
+                )
+        ));
+
+        assertNull(response.error());
+        Map<?, ?> mcpResult = (Map<?, ?>) response.result();
+        ToolApiModels.ExecuteToolResponse envelope =
+                (ToolApiModels.ExecuteToolResponse) mcpResult.get("structuredContent");
+        assertEquals("completed", envelope.status());
+        Map<String, Object> output = mapper.convertValue(envelope.result(), new TypeReference<>() { });
+        assertEquals("target-1", output.get("runTargetId"));
+        assertEquals("attempt-1", output.get("attemptId"));
+        assertEquals(2, ((List<?>) output.get("events")).size());
+
+        var queried = realAdmin.getAttemptEvents("attempt-1");
+        assertEquals(2, queried.size());
+        for (int index = 0; index < fixture.size(); index++) {
+            Map<String, Object> original = fixture.get(index);
+            Map<String, Object> payload = queried.get(index).payload();
+            assertEquals(original.get("step_id"), payload.get("step_id"));
+            assertEquals(original.get("behavior_label"), payload.get("behavior_label"));
+            assertEquals(((Number) original.get("entered_at_ms")).longValue(), ((Number) payload.get("entered_at_ms")).longValue());
+            assertEquals(((Number) original.get("arrived_at_ms")).longValue(), ((Number) payload.get("arrived_at_ms")).longValue());
+            assertEquals(((Number) original.get("dwell_ms")).longValue(), ((Number) payload.get("dwell_ms")).longValue());
+            assertEquals("wechat.text_chat.v1", payload.get("sequence_id"));
+            assertEquals("device-1", payload.get("deviceId"));
+        }
     }
 
     @Test
@@ -585,6 +845,7 @@ class ToolFacadeServiceTest {
                 List.of(new AdminApiModels.ExperimentRunTargetResponse(
                         "target-1",
                         deviceId,
+                        null,
                         "QUEUED",
                         1,
                         "task-1",
@@ -637,6 +898,7 @@ class ToolFacadeServiceTest {
                 List.of(new AdminApiModels.ExperimentRunTargetResponse(
                         "target-1",
                         "device-1",
+                        null,
                         targetStatus,
                         1,
                         "task-1",

@@ -36,6 +36,15 @@ public interface TaskAttemptMapper {
             SELECT attempt_id, task_id, device_id, run_id, status, final_state, lease_expire_at, failure_reason,
                    preflight_summary_json, failure_detail_json, started_at, finished_at, created_at, updated_at
             FROM task_attempts
+            WHERE attempt_id = #{attemptId}
+            FOR UPDATE
+            """)
+    TaskAttemptEntity lockById(@Param("attemptId") String attemptId);
+
+    @Select("""
+            SELECT attempt_id, task_id, device_id, run_id, status, final_state, lease_expire_at, failure_reason,
+                   preflight_summary_json, failure_detail_json, started_at, finished_at, created_at, updated_at
+            FROM task_attempts
             ORDER BY created_at DESC
             """)
     List<TaskAttemptEntity> findAll();

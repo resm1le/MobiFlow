@@ -8,6 +8,7 @@ import com.example.platform.control.domain.PersistenceModels.AiRunSummaryResultE
 import com.example.platform.control.domain.PersistenceModels.ArtifactUploadSessionEntity;
 import com.example.platform.control.domain.PersistenceModels.DeviceRuntimeStateEntity;
 import com.example.platform.control.domain.PersistenceModels.ExperimentRunEntity;
+import com.example.platform.control.domain.PersistenceModels.ExperimentRunTargetEntity;
 import com.example.platform.control.domain.PersistenceModels.RunEventEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskAttemptEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskEntity;
@@ -68,6 +69,9 @@ class ControlMapperIntegrationTest {
 
     @Autowired
     private ExperimentRunMapper experimentRunMapper;
+
+    @Autowired
+    private ExperimentRunTargetMapper experimentRunTargetMapper;
 
     @Autowired
     private RunEventMapper runEventMapper;
@@ -160,6 +164,34 @@ class ControlMapperIntegrationTest {
                 .toList();
 
         assertEquals(List.of("task-shared", "task-pinned"), taskIds);
+    }
+
+    @Test
+    void heterogeneousPinnedTasksKeepTheirProfileAndPayloadAtClaim() {
+        TaskEntity textChat = task("task-text-chat", 100, 100L, DomainValues.TASK_STATUS_QUEUED);
+        textChat.setTargetDeviceId("device-1");
+        textChat.setProfilePackage("com.tencent.mm");
+        textChat.setTaskPayloadJson("{\"goal\":\"text chat\",\"waypoint_sequence\":{\"sequence_id\":\"wechat.text_chat.v1\"}}");
+        TaskEntity videoCall = task("task-video-call", 100, 100L, DomainValues.TASK_STATUS_QUEUED);
+        videoCall.setTargetDeviceId("device-2");
+        videoCall.setProfilePackage("com.demo.video");
+        videoCall.setTaskPayloadJson("{\"goal\":\"video call\",\"waypoint_sequence\":{\"sequence_id\":\"demo.video_call.v1\"}}");
+        insertTask(textChat);
+        insertTask(videoCall);
+
+        TaskEntity deviceOneTask = inNewTransaction(() -> taskMapper.findClaimableQueuedTasks("device-1", 1)).get(0);
+        TaskEntity deviceTwoTask = inNewTransaction(() -> taskMapper.findClaimableQueuedTasks("device-2", 1)).get(0);
+
+        assertEquals("task-text-chat", deviceOneTask.getTaskId());
+        assertEquals("com.tencent.mm", deviceOneTask.getProfilePackage());
+        assertEquals("wechat.text_chat.v1", jsonCodec.readMap(
+                jsonCodec.write(jsonCodec.readMap(deviceOneTask.getTaskPayloadJson()).get("waypoint_sequence"))
+        ).get("sequence_id"));
+        assertEquals("task-video-call", deviceTwoTask.getTaskId());
+        assertEquals("com.demo.video", deviceTwoTask.getProfilePackage());
+        assertEquals("demo.video_call.v1", jsonCodec.readMap(
+                jsonCodec.write(jsonCodec.readMap(deviceTwoTask.getTaskPayloadJson()).get("waypoint_sequence"))
+        ).get("sequence_id"));
     }
 
     @Test
@@ -351,6 +383,46 @@ class ControlMapperIntegrationTest {
     }
 
     @Test
+    void heterogeneousRunAndTargetSequenceRoundTrip() {
+        ExperimentRunEntity run = new ExperimentRunEntity();
+        run.setRunId("run-heterogeneous");
+        run.setName("heterogeneous");
+        run.setPoolId(null);
+        run.setStatus(DomainValues.RUN_STATUS_QUEUED);
+        run.setTaskType("PLUGIN_RUN");
+        run.setProfilePackage(null);
+        run.setTaskPayloadJson("{}");
+        run.setRunConfigJson("{\"loopCount\":1}");
+        run.setArtifactPolicyJson("{\"uploadLog\":true}");
+        run.setPriority(100);
+        run.setLabelsJson("[]");
+        run.setSource("agent");
+        run.setCreatedBy("agent");
+        run.setMaxRetriesPerDevice(1);
+        run.setQueueTimeoutMs(300_000);
+        run.setCreatedAt(1_000);
+        run.setUpdatedAt(1_000);
+        experimentRunMapper.insert(run);
+
+        ExperimentRunTargetEntity target = new ExperimentRunTargetEntity();
+        target.setRunTargetId("target-heterogeneous");
+        target.setRunId(run.getRunId());
+        target.setDeviceId("device-1");
+        target.setSequenceId("wechat.text_chat.v1");
+        target.setStatus(DomainValues.RUN_TARGET_STATUS_QUEUED);
+        target.setAttemptCount(1);
+        target.setCreatedAt(1_000);
+        target.setUpdatedAt(1_000);
+        experimentRunTargetMapper.insert(target);
+
+        assertEquals(null, experimentRunMapper.findById(run.getRunId()).getProfilePackage());
+        ExperimentRunTargetEntity persisted = experimentRunTargetMapper.findById(target.getRunTargetId());
+        assertEquals("wechat.text_chat.v1", persisted.getSequenceId());
+        assertEquals("wechat.text_chat.v1", experimentRunTargetMapper.lockById(target.getRunTargetId()).getSequenceId());
+        assertEquals("wechat.text_chat.v1", experimentRunTargetMapper.findByRunId(run.getRunId()).get(0).getSequenceId());
+    }
+
+    @Test
     void runEventMapperBatchInsertPersistsMultipleRowsInOrder() {
         List<RunEventEntity> events = List.of(
                 event("attempt-1", "task-1", "device-1", "run-1", "STEP_END", "first", 1000L),
@@ -362,6 +434,94 @@ class ControlMapperIntegrationTest {
         List<RunEventEntity> persisted = runEventMapper.findByAttemptId("attempt-1");
         assertEquals(2, persisted.size());
         assertEquals(List.of("STEP_END", "ACTION_END"), persisted.stream().map(RunEventEntity::getEventType).toList());
+        assertTrue(persisted.stream().allMatch(event -> event.getEventKey() == null));
+        assertTrue(persisted.stream().allMatch(event -> event.getPayloadJson() == null));
+    }
+
+    @Test
+    void runEventMapperPersistsJsonAndNoMutationUpsertPreservesFirstEvent() {
+        RunEventEntity original = event(
+                "attempt-waypoint",
+                "task-waypoint",
+                "device-waypoint",
+                "run-waypoint",
+                "WAYPOINT_SEGMENT",
+                "waypoint_segment:0:COMPLETE",
+                1_500L
+        );
+        original.setEventKey("waypoint:0");
+        original.setState("COMPLETE");
+        original.setStepIndex(0);
+        original.setActionIndex(null);
+        original.setPayloadJson("{\"sequence_id\":\"sequence-1\",\"step_id\":\"logged_in\",\"deviceId\":\"device-waypoint\"}");
+        runEventMapper.insertBatchNoMutation(List.of(original));
+
+        RunEventEntity conflicting = event(
+                "attempt-waypoint",
+                "task-waypoint",
+                "device-waypoint",
+                "run-waypoint",
+                "WAYPOINT_SEGMENT",
+                "conflicting-message",
+                9_999L
+        );
+        conflicting.setEventKey("waypoint:0");
+        conflicting.setState("INCOMPLETE");
+        conflicting.setStepIndex(0);
+        conflicting.setActionIndex(null);
+        conflicting.setPayloadJson("{\"sequence_id\":\"sequence-1\",\"step_id\":\"different\",\"deviceId\":\"device-waypoint\"}");
+        runEventMapper.insertBatchNoMutation(List.of(conflicting));
+
+        List<RunEventEntity> persisted = runEventMapper.findByAttemptIdAndEventKeys(
+                "attempt-waypoint",
+                List.of("waypoint:0")
+        );
+        assertEquals(1, persisted.size());
+        RunEventEntity event = persisted.get(0);
+        assertEquals("waypoint_segment:0:COMPLETE", event.getMessage());
+        assertEquals("COMPLETE", event.getState());
+        assertEquals(1_500L, event.getTs());
+        assertEquals(
+                Map.of(
+                        "sequence_id", "sequence-1",
+                        "step_id", "logged_in",
+                        "deviceId", "device-waypoint"
+                ),
+                jsonCodec.readMap(event.getPayloadJson())
+        );
+    }
+
+    @Test
+    void taskAttemptLockSerializesSameAttemptWithoutBlockingDifferentAttempt() throws Exception {
+        long now = System.currentTimeMillis();
+        taskAttemptMapper.insert(attempt("attempt-lock-a", DomainValues.ATTEMPT_STATUS_SUCCEEDED, now));
+        taskAttemptMapper.insert(attempt("attempt-lock-b", DomainValues.ATTEMPT_STATUS_SUCCEEDED, now));
+        CountDownLatch rowLocked = new CountDownLatch(1);
+        CountDownLatch releaseLock = new CountDownLatch(1);
+
+        Future<Void> locker = executorService.submit(() -> {
+            inNewTransaction(() -> {
+                assertNotNull(taskAttemptMapper.lockById("attempt-lock-a"));
+                rowLocked.countDown();
+                awaitLatch(releaseLock);
+                return null;
+            });
+            return null;
+        });
+        assertTrue(rowLocked.await(5, TimeUnit.SECONDS));
+
+        Future<TaskAttemptEntity> sameAttempt = executorService.submit(() ->
+                inNewTransaction(() -> taskAttemptMapper.lockById("attempt-lock-a"))
+        );
+        TaskAttemptEntity differentAttempt = inNewTransaction(() -> taskAttemptMapper.lockById("attempt-lock-b"));
+        assertNotNull(differentAttempt);
+        assertEquals("attempt-lock-b", differentAttempt.getAttemptId());
+        Thread.sleep(300L);
+        assertFalse(sameAttempt.isDone());
+
+        releaseLock.countDown();
+        locker.get(5, TimeUnit.SECONDS);
+        assertEquals("attempt-lock-a", sameAttempt.get(5, TimeUnit.SECONDS).getAttemptId());
     }
 
     @Test

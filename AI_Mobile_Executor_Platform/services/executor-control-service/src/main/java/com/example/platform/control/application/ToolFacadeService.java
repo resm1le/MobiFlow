@@ -6,6 +6,7 @@ import com.example.platform.control.api.ExecutorApiModels;
 import com.example.platform.control.api.ToolApiModels;
 import com.example.platform.control.domain.PersistenceModels.ToolConfirmationTokenEntity;
 import com.example.platform.control.domain.PersistenceModels.ToolExecutionAuditEntity;
+import com.example.platform.control.domain.PersistenceModels.RunEventEntity;
 import com.example.platform.control.infrastructure.mapper.ToolConfirmationTokenMapper;
 import com.example.platform.control.infrastructure.mapper.ToolExecutionAuditMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class ToolFacadeService {
@@ -55,6 +57,7 @@ public class ToolFacadeService {
     private final AiFailureTriageService aiFailureTriageService;
     private final RunPlanningContextBuilder runPlanningContextBuilder;
     private final ToolResourceService toolResourceService;
+    private final WaypointTimelineService waypointTimelineService;
     private final IdGenerator idGenerator;
     private final JsonCodec jsonCodec;
     private final ObjectMapper objectMapper;
@@ -70,6 +73,7 @@ public class ToolFacadeService {
                              AiFailureTriageService aiFailureTriageService,
                              RunPlanningContextBuilder runPlanningContextBuilder,
                              ToolResourceService toolResourceService,
+                             WaypointTimelineService waypointTimelineService,
                              IdGenerator idGenerator,
                              JsonCodec jsonCodec,
                              ObjectMapper objectMapper,
@@ -83,6 +87,7 @@ public class ToolFacadeService {
         this.aiFailureTriageService = aiFailureTriageService;
         this.runPlanningContextBuilder = runPlanningContextBuilder;
         this.toolResourceService = toolResourceService;
+        this.waypointTimelineService = waypointTimelineService;
         this.idGenerator = idGenerator;
         this.jsonCodec = jsonCodec;
         this.objectMapper = objectMapper;
@@ -450,6 +455,25 @@ public class ToolFacadeService {
                 AttemptIdArgs.class,
                 args -> result(adminApiService.getAttemptEvents(requireNonBlank(args.attemptId(), ControlErrorCode.TOOL_ARGUMENT_INVALID)))
         ));
+        register(definitions, evidenceDefinition(
+                "record_waypoint_segments",
+                "Record Waypoint Segments",
+                "Persist terminal-attempt waypoint timing evidence using trusted Platform lineage.",
+                recordWaypointSegmentsArgsSchema(),
+                waypointTimelineRecordResultSchema(),
+                RecordWaypointSegmentsArgs.class,
+                args -> {
+                    String runTargetId = requireNonBlank(args.runTargetId(), ControlErrorCode.TOOL_ARGUMENT_INVALID);
+                    String attemptId = requireNonBlank(args.attemptId(), ControlErrorCode.TOOL_ARGUMENT_INVALID);
+                    List<RunEventEntity> recorded = waypointTimelineService.record(
+                            runTargetId, attemptId, parseWaypointSegments(args.waypointSegments()));
+                    return result(new WaypointTimelineRecordResult(
+                            runTargetId,
+                            attemptId,
+                            recorded.stream().map(this::toRunEventResponse).toList()
+                    ));
+                }
+        ));
         register(definitions, definition(
                 "get_attempt_artifacts",
                 "Get Attempt Artifacts",
@@ -677,6 +701,41 @@ public class ToolFacadeService {
                         args.createdBy(),
                         args.maxRetriesPerDevice(),
                         args.queueTimeoutMs()
+                )))
+        ));
+        register(definitions, definition(
+                "create_heterogeneous_run",
+                "Create Heterogeneous Run",
+                "Create a governed run with independently resolved waypoint sequences per target.",
+                RISK_EXECUTION,
+                createHeterogeneousRunArgsSchema(),
+                runDetailSchema(),
+                CreateHeterogeneousRunArgs.class,
+                args -> result(experimentRunService.createHeterogeneousRun(new AdminApiModels.CreateHeterogeneousRunRequest(
+                        requireNonBlank(args.name(), ControlErrorCode.TOOL_ARGUMENT_INVALID),
+                        args.description(),
+                        requireNonBlank(args.taskType(), ControlErrorCode.TOOL_ARGUMENT_INVALID),
+                        objectMapper.convertValue(args.runConfig(), ExecutorApiModels.RunConfig.class),
+                        objectMapper.convertValue(args.artifactPolicy(), ExecutorApiModels.ArtifactPolicy.class),
+                        args.priority(),
+                        listOrEmpty(args.labels()),
+                        args.source(),
+                        args.createdBy(),
+                        args.maxRetriesPerDevice(),
+                        args.queueTimeoutMs(),
+                        (args.dispatch() == null ? List.<HeterogeneousDispatchArgs>of() : args.dispatch()).stream()
+                                .map(entry -> new AdminApiModels.HeterogeneousDispatchEntry(
+                                        entry.sequenceId(),
+                                        entry.profilePackage(),
+                                        mapOrEmpty(entry.taskPayload()),
+                                        entry.select() == null ? null : new AdminApiModels.DeviceSelector(
+                                                entry.select().count(),
+                                                listOrEmpty(entry.select().deviceIds()),
+                                                listOrEmpty(entry.select().requiredTags()),
+                                                listOrEmpty(entry.select().excludedTags())
+                                        )
+                                ))
+                                .toList()
                 )))
         ));
         register(definitions, definition(
@@ -1515,6 +1574,25 @@ public class ToolFacadeService {
         return value == null ? null : String.valueOf(value);
     }
 
+    private AdminApiModels.RunEventResponse toRunEventResponse(RunEventEntity event) {
+        return new AdminApiModels.RunEventResponse(
+                event.getId(),
+                event.getAttemptId(),
+                event.getTaskId(),
+                event.getDeviceId(),
+                event.getRunId(),
+                event.getScenarioId(),
+                event.getStepIndex(),
+                event.getActionIndex(),
+                event.getEventType(),
+                event.getState(),
+                event.getCode(),
+                event.getMessage(),
+                event.getPayloadJson() == null ? null : jsonCodec.readMap(event.getPayloadJson()),
+                event.getTs()
+        );
+    }
+
     private void register(Map<String, ToolDefinition<?>> definitions, ToolDefinition<?> definition) {
         definitions.put(definition.name(), definition);
     }
@@ -1535,6 +1613,30 @@ public class ToolFacadeService {
                 riskLevel,
                 semanticTagsForRisk(riskLevel),
                 Objects.equals(riskLevel, RISK_EXECUTION),
+                inputSchema,
+                outputSchema,
+                RESULT_MODE_INLINE,
+                STABILITY_STABLE,
+                argumentsType,
+                executor
+        );
+    }
+
+    private <A> ToolDefinition<A> evidenceDefinition(String name,
+                                                     String title,
+                                                     String description,
+                                                     Map<String, Object> inputSchema,
+                                                     Map<String, Object> outputSchema,
+                                                     Class<A> argumentsType,
+                                                     ToolExecutor<A> executor) {
+        return new ToolDefinition<>(
+                name,
+                title,
+                description,
+                TOOL_KIND_SIDE_EFFECT,
+                RISK_ADVISORY,
+                List.of("evidence", "lineage", "idempotent"),
+                false,
                 inputSchema,
                 outputSchema,
                 RESULT_MODE_INLINE,
@@ -1565,6 +1667,21 @@ public class ToolFacadeService {
 
     private List<String> listOrEmpty(List<String> value) {
         return value == null ? List.of() : value;
+    }
+
+    private List<WaypointTimelineService.WaypointSegmentInput> parseWaypointSegments(
+            List<Map<String, Object>> rawSegments) {
+        if (rawSegments == null || rawSegments.isEmpty()) {
+            throw ControlApiExceptions.badRequest(ControlErrorCode.WAYPOINT_SEGMENT_INVALID);
+        }
+        Set<String> expectedKeys = Set.of(
+                "step_id", "behavior_label", "entered_at_ms", "arrived_at_ms", "dwell_ms");
+        return rawSegments.stream().map(segment -> {
+            if (segment == null || !segment.keySet().equals(expectedKeys)) {
+                throw ControlApiExceptions.badRequest(ControlErrorCode.WAYPOINT_SEGMENT_INVALID);
+            }
+            return objectMapper.convertValue(segment, WaypointTimelineService.WaypointSegmentInput.class);
+        }).toList();
     }
 
     private Map<String, Object> noArgsSchema() {
@@ -1633,6 +1750,61 @@ public class ToolFacadeService {
                 "maxRetriesPerDevice", integerSchema(),
                 "queueTimeoutMs", integerSchema()
         ), List.of("name", "devicePoolId", "taskType", "profilePackage", "taskPayload", "runConfig", "artifactPolicy"));
+    }
+
+    private Map<String, Object> createHeterogeneousRunArgsSchema() {
+        Map<String, Object> namedSelector = objectSchema(props(
+                "deviceIds", arraySchema(stringSchema())
+        ), List.of("deviceIds"));
+        Map<String, Object> taggedSelector = objectSchema(props(
+                "count", integerSchema(),
+                "requiredTags", arraySchema(stringSchema()),
+                "excludedTags", arraySchema(stringSchema())
+        ), List.of("count"));
+        Map<String, Object> selector = Map.of("oneOf", List.of(namedSelector, taggedSelector));
+        Map<String, Object> dispatchEntry = objectSchema(props(
+                "sequenceId", stringSchema(),
+                "profilePackage", stringSchema(),
+                "taskPayload", mapSchema(),
+                "select", selector
+        ), List.of("sequenceId", "profilePackage", "taskPayload", "select"));
+        return objectSchema(props(
+                "name", stringSchema(),
+                "description", nullableStringSchema(),
+                "taskType", stringSchema(),
+                "runConfig", runConfigSchema(),
+                "artifactPolicy", artifactPolicySchema(),
+                "priority", integerSchema(),
+                "labels", arraySchema(stringSchema()),
+                "source", stringSchema(),
+                "createdBy", stringSchema(),
+                "maxRetriesPerDevice", integerSchema(),
+                "queueTimeoutMs", integerSchema(),
+                "dispatch", arraySchema(dispatchEntry)
+        ), List.of("name", "taskType", "runConfig", "artifactPolicy", "dispatch"));
+    }
+
+    private Map<String, Object> recordWaypointSegmentsArgsSchema() {
+        Map<String, Object> segment = objectSchema(props(
+                "step_id", stringSchema(),
+                "behavior_label", stringSchema(),
+                "entered_at_ms", nullableIntegerSchema(),
+                "arrived_at_ms", nullableIntegerSchema(),
+                "dwell_ms", nullableIntegerSchema()
+        ), List.of("step_id", "behavior_label", "entered_at_ms", "arrived_at_ms", "dwell_ms"));
+        return objectSchema(props(
+                "runTargetId", stringSchema(),
+                "attemptId", stringSchema(),
+                "waypointSegments", arraySchema(segment)
+        ), List.of("runTargetId", "attemptId", "waypointSegments"));
+    }
+
+    private Map<String, Object> waypointTimelineRecordResultSchema() {
+        return objectSchema(props(
+                "runTargetId", stringSchema(),
+                "attemptId", stringSchema(),
+                "events", arraySchema(runEventSchema())
+        ), List.of("runTargetId", "attemptId", "events"));
     }
 
     private Map<String, Object> createSingleDeviceRunArgsSchema() {
@@ -1783,7 +1955,7 @@ public class ToolFacadeService {
                 "status", stringSchema(),
                 "finalState", nullableStringSchema(),
                 "taskType", stringSchema(),
-                "profilePackage", stringSchema(),
+                "profilePackage", nullableStringSchema(),
                 "priority", integerSchema(),
                 "labels", arraySchema(stringSchema()),
                 "source", stringSchema(),
@@ -1803,6 +1975,7 @@ public class ToolFacadeService {
         return objectSchema(props(
                 "runTargetId", stringSchema(),
                 "deviceId", stringSchema(),
+                "sequenceId", nullableStringSchema(),
                 "status", stringSchema(),
                 "attemptCount", integerSchema(),
                 "currentTaskId", nullableStringSchema(),
@@ -1812,7 +1985,7 @@ public class ToolFacadeService {
                 "finishedAt", nullableIntegerSchema(),
                 "task", nullableSchema(taskSchema()),
                 "latestAttempt", nullableSchema(attemptSummarySchema())
-        ), List.of("runTargetId", "deviceId", "status", "attemptCount"));
+        ), List.of("runTargetId", "deviceId", "sequenceId", "status", "attemptCount"));
     }
 
     private Map<String, Object> runDetailSchema() {
@@ -1839,8 +2012,9 @@ public class ToolFacadeService {
                 "state", nullableStringSchema(),
                 "code", nullableStringSchema(),
                 "message", stringSchema(),
+                "payload", nullableSchema(mapSchema()),
                 "ts", integerSchema()
-        ), List.of("attemptId", "taskId", "deviceId", "runId", "eventType", "message", "ts"));
+        ), List.of("attemptId", "taskId", "deviceId", "runId", "eventType", "message", "payload", "ts"));
     }
 
     private Map<String, Object> resourceHandleSchema() {
@@ -2337,6 +2511,52 @@ public class ToolFacadeService {
             String createdBy,
             Integer maxRetriesPerDevice,
             Long queueTimeoutMs
+    ) {
+    }
+
+    private record CreateHeterogeneousRunArgs(
+            String name,
+            String description,
+            String taskType,
+            Map<String, Object> runConfig,
+            Map<String, Object> artifactPolicy,
+            Integer priority,
+            List<String> labels,
+            String source,
+            String createdBy,
+            Integer maxRetriesPerDevice,
+            Long queueTimeoutMs,
+            List<HeterogeneousDispatchArgs> dispatch
+    ) {
+    }
+
+    private record RecordWaypointSegmentsArgs(
+            String runTargetId,
+            String attemptId,
+            List<Map<String, Object>> waypointSegments
+    ) {
+    }
+
+    private record WaypointTimelineRecordResult(
+            String runTargetId,
+            String attemptId,
+            List<AdminApiModels.RunEventResponse> events
+    ) {
+    }
+
+    private record HeterogeneousDispatchArgs(
+            String sequenceId,
+            String profilePackage,
+            Map<String, Object> taskPayload,
+            DeviceSelectorArgs select
+    ) {
+    }
+
+    private record DeviceSelectorArgs(
+            Integer count,
+            List<String> deviceIds,
+            List<String> requiredTags,
+            List<String> excludedTags
     ) {
     }
 

@@ -170,7 +170,8 @@ public class McpFacadeService {
         tool.put("annotations", Map.of(
                 "readOnlyHint", !"side_effect".equals(item.toolKind()),
                 "destructiveHint", "EXECUTION".equals(item.riskLevel()),
-                "idempotentHint", !"side_effect".equals(item.toolKind()),
+                "idempotentHint", !"side_effect".equals(item.toolKind())
+                        || item.semanticTags().contains("idempotent"),
                 "openWorldHint", false
         ));
         return tool;

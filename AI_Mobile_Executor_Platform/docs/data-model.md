@@ -33,11 +33,11 @@
 
 ### Experiment Run
 
-一次 run-first 运行的头对象，保存任务形态、device pool、优先级、labels、artifact policy、retry budget 和 queue timeout。
+一次 run-first 运行的头对象，保存公共任务形态、device pool、优先级、labels、artifact policy、retry budget 和 queue timeout。异构 run 的 `pool_id` 与 `profile_package` 可以为空，`task_payload_json` 固定为 `{}`；它们不能替代 target 当前 task 的真实执行定义。
 
 ### Experiment Run Target
 
-一次 run 中面向单设备的执行槽位，拥有 per-device 状态、retry 计数、当前 task 和最近 attempt。
+一次 run 中面向单设备的执行槽位，拥有不可变的 nullable `sequence_id`、per-device 状态、retry 计数、当前 task 和最近 attempt。历史同构 target 的 `sequence_id` 保持为空。
 
 ### Device Command
 
@@ -45,7 +45,7 @@
 
 ### Run Event
 
-Android 端对一次 attempt 发出的追加型执行遥测。
+一次 attempt 的追加型执行遥测。除 Android executor 事件外，Platform 也把 Agent 的航点时间证据保存为结构化 `WAYPOINT_SEGMENT`：`event_key` 在 attempt 内幂等，`payload_json` 保存原始五字段以及由 Platform 注入的可信 `sequence_id/deviceId`。
 
 ### Artifact
 
@@ -90,6 +90,10 @@ Android 端对一次 attempt 发出的追加型执行遥测。
 - task 在 claim 时创建 attempt
 - attempt、run events 和 artifacts 会把 run 关系一路带下去
 - `create_single_device_run` 会创建一条单目标 run，并把 task 绑定到指定设备
+- `create_heterogeneous_run` 在一次事务中为每个 resolved dispatch assignment 创建 target/task
+- target 的 `sequence_id` 与当前 task 的 `task_payload_json` 共同定义该设备的行为；run 头不是异构任务模板
+- 失败重试与 queue-timeout 重试从 target 的上一 task 克隆完整 TaskSpec，不回退到 run 头
+- waypoint segment 通过 attempt 关联保存，retry 不覆盖上一 attempt 的证据
 
 ## Tool Runtime 审计关系
 

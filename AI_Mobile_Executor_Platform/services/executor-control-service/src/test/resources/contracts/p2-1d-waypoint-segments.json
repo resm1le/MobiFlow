@@ -1,0 +1,16 @@
+[
+  {
+    "step_id": "logged_in",
+    "behavior_label": "wechat_text_chat",
+    "entered_at_ms": 1000,
+    "arrived_at_ms": 1500,
+    "dwell_ms": 500
+  },
+  {
+    "step_id": "message_sent",
+    "behavior_label": "wechat_text_chat",
+    "entered_at_ms": 1600,
+    "arrived_at_ms": 2200,
+    "dwell_ms": 600
+  }
+]

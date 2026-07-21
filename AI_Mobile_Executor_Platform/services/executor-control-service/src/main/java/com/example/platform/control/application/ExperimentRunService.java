@@ -3,6 +3,7 @@ package com.example.platform.control.application;
 import com.example.platform.control.api.AdminApiModels.AttemptSummary;
 import com.example.platform.control.api.AdminApiModels.CreateDevicePoolRequest;
 import com.example.platform.control.api.AdminApiModels.CreateExperimentRunRequest;
+import com.example.platform.control.api.AdminApiModels.CreateHeterogeneousRunRequest;
 import com.example.platform.control.api.AdminApiModels.CreateSingleDeviceRunRequest;
 import com.example.platform.control.api.AdminApiModels.CreateTaskRequest;
 import com.example.platform.control.api.AdminApiModels.DevicePoolResponse;
@@ -60,6 +61,7 @@ public class ExperimentRunService {
     private final JsonCodec jsonCodec;
     private final IdGenerator idGenerator;
     private final TaskRequestValidator taskRequestValidator;
+    private final HeterogeneousDispatchResolver heterogeneousDispatchResolver;
     private final Clock clock = Clock.systemUTC();
 
     public ExperimentRunService(DevicePoolMapper devicePoolMapper,
@@ -72,7 +74,8 @@ public class ExperimentRunService {
                                 DeviceCommandMapper commandMapper,
                                 JsonCodec jsonCodec,
                                 IdGenerator idGenerator,
-                                TaskRequestValidator taskRequestValidator) {
+                                TaskRequestValidator taskRequestValidator,
+                                HeterogeneousDispatchResolver heterogeneousDispatchResolver) {
         this.devicePoolMapper = devicePoolMapper;
         this.experimentRunMapper = experimentRunMapper;
         this.experimentRunTargetMapper = experimentRunTargetMapper;
@@ -84,6 +87,7 @@ public class ExperimentRunService {
         this.jsonCodec = jsonCodec;
         this.idGenerator = idGenerator;
         this.taskRequestValidator = taskRequestValidator;
+        this.heterogeneousDispatchResolver = heterogeneousDispatchResolver;
     }
 
     public List<DevicePoolResponse> listDevicePools() {
@@ -209,6 +213,38 @@ public class ExperimentRunService {
     }
 
     @Transactional
+    public ExperimentRunDetailResponse createHeterogeneousRun(CreateHeterogeneousRunRequest request) {
+        String name = requireNonBlank(request.name(), ControlErrorCode.HETEROGENEOUS_RUN_INVALID);
+        int maxRetriesPerDevice = normalizeMaxRetriesPerDevice(request.maxRetriesPerDevice());
+        long queueTimeoutMs = normalizeQueueTimeoutMs(request.queueTimeoutMs());
+        List<HeterogeneousDispatchResolver.ResolvedDispatchEntry> resolved = heterogeneousDispatchResolver.resolve(request);
+        if (resolved.isEmpty()) {
+            throw ControlApiExceptions.badRequest(ControlErrorCode.HETEROGENEOUS_RUN_INVALID);
+        }
+
+        TaskRequestValidator.NormalizedTaskRequest representative = resolved.get(0).task();
+        Set<String> profiles = resolved.stream()
+                .map(entry -> entry.task().profilePackage())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        ExperimentRunEntity run = createRunEntity(
+                name,
+                request.description(),
+                null,
+                representative,
+                profiles.size() == 1 ? profiles.iterator().next() : null,
+                "{}",
+                maxRetriesPerDevice,
+                queueTimeoutMs
+        );
+        for (HeterogeneousDispatchResolver.ResolvedDispatchEntry entry : resolved) {
+            for (String deviceId : entry.deviceIds()) {
+                createInitialTargetTask(run, entry.sequenceId(), deviceId, entry.task(), run.getCreatedAt());
+            }
+        }
+        return getRun(run.getRunId());
+    }
+
+    @Transactional
     public void cancelRun(String runId) {
         ExperimentRunEntity run = requireLockedRun(runId);
         long now = clock.millis();
@@ -325,7 +361,7 @@ public class ExperimentRunService {
         }
 
         if (target.getAttemptCount() <= run.getMaxRetriesPerDevice()) {
-            TaskEntity retryTask = queueNextTargetTask(run, target, target.getAttemptCount() + 1, now);
+            TaskEntity retryTask = queueNextTargetTask(run, target, task, target.getAttemptCount() + 1, now);
             target.setStatus(DomainValues.RUN_TARGET_STATUS_RETRY_PENDING);
             target.setAttemptCount(target.getAttemptCount() + 1);
             target.setCurrentTaskId(retryTask.getTaskId());
@@ -377,7 +413,7 @@ public class ExperimentRunService {
             }
             taskMapper.updateStatus(task.getTaskId(), DomainValues.TASK_STATUS_CANCELLED, task.getScheduleVersion(), now);
             if (target.getAttemptCount() <= run.getMaxRetriesPerDevice()) {
-                TaskEntity retryTask = queueNextTargetTask(run, target, target.getAttemptCount() + 1, now);
+                TaskEntity retryTask = queueNextTargetTask(run, target, task, target.getAttemptCount() + 1, now);
                 target.setStatus(DomainValues.RUN_TARGET_STATUS_RETRY_PENDING);
                 target.setAttemptCount(target.getAttemptCount() + 1);
                 target.setCurrentTaskId(retryTask.getTaskId());
@@ -398,10 +434,47 @@ public class ExperimentRunService {
     }
 
     private void createInitialTargetTask(ExperimentRunEntity run, String deviceId, long now) {
+        createInitialTargetTask(run, null, deviceId, new TargetTaskSpec(
+                run.getTaskType(),
+                run.getProfilePackage(),
+                run.getTaskPayloadJson(),
+                run.getRunConfigJson(),
+                run.getArtifactPolicyJson(),
+                run.getPriority(),
+                run.getLabelsJson(),
+                run.getSource(),
+                run.getCreatedBy()
+        ), now);
+    }
+
+    private void createInitialTargetTask(ExperimentRunEntity run,
+                                         String sequenceId,
+                                         String deviceId,
+                                         TaskRequestValidator.NormalizedTaskRequest task,
+                                         long now) {
+        createInitialTargetTask(run, sequenceId, deviceId, new TargetTaskSpec(
+                task.taskType(),
+                task.profilePackage(),
+                jsonCodec.write(task.taskPayload()),
+                jsonCodec.write(task.runConfig()),
+                jsonCodec.write(task.artifactPolicy()),
+                task.priority(),
+                jsonCodec.write(task.labels()),
+                task.source(),
+                task.createdBy()
+        ), now);
+    }
+
+    private void createInitialTargetTask(ExperimentRunEntity run,
+                                         String sequenceId,
+                                         String deviceId,
+                                         TargetTaskSpec spec,
+                                         long now) {
         ExperimentRunTargetEntity target = new ExperimentRunTargetEntity();
         target.setRunTargetId(idGenerator.nextRunTargetId());
         target.setRunId(run.getRunId());
         target.setDeviceId(deviceId);
+        target.setSequenceId(sequenceId);
         target.setStatus(DomainValues.RUN_TARGET_STATUS_QUEUED);
         target.setAttemptCount(1);
         target.setCreatedAt(now);
@@ -412,18 +485,18 @@ public class ExperimentRunService {
         task.setRunId(run.getRunId());
         task.setRunTargetId(target.getRunTargetId());
         task.setTargetDeviceId(deviceId);
-        task.setTaskType(run.getTaskType());
-        task.setProfilePackage(run.getProfilePackage());
-        task.setTaskPayloadJson(run.getTaskPayloadJson());
-        task.setRunConfigJson(run.getRunConfigJson());
-        task.setArtifactPolicyJson(run.getArtifactPolicyJson());
-        task.setPriority(run.getPriority());
-        task.setLabelsJson(run.getLabelsJson());
-        task.setSource(run.getSource());
+        task.setTaskType(spec.taskType());
+        task.setProfilePackage(spec.profilePackage());
+        task.setTaskPayloadJson(spec.taskPayloadJson());
+        task.setRunConfigJson(spec.runConfigJson());
+        task.setArtifactPolicyJson(spec.artifactPolicyJson());
+        task.setPriority(spec.priority());
+        task.setLabelsJson(spec.labelsJson());
+        task.setSource(spec.source());
         task.setScheduleVersion(null);
         task.setIdempotencyKey(run.getRunId() + ":" + target.getRunTargetId() + ":1");
         task.setStatus(DomainValues.TASK_STATUS_QUEUED);
-        task.setCreatedBy(run.getCreatedBy());
+        task.setCreatedBy(spec.createdBy());
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
         taskMapper.insert(task);
@@ -496,24 +569,31 @@ public class ExperimentRunService {
         return DomainValues.RUN_FINAL_STATE_PARTIAL;
     }
 
-    private TaskEntity queueNextTargetTask(ExperimentRunEntity run, ExperimentRunTargetEntity target, int attemptOrdinal, long now) {
+    private TaskEntity queueNextTargetTask(ExperimentRunEntity run,
+                                           ExperimentRunTargetEntity target,
+                                           TaskEntity previousTask,
+                                           int attemptOrdinal,
+                                           long now) {
+        if (previousTask == null) {
+            throw ControlApiExceptions.badRequest(ControlErrorCode.TASK_NOT_FOUND);
+        }
         TaskEntity task = new TaskEntity();
         task.setTaskId(idGenerator.nextTaskId());
         task.setRunId(run.getRunId());
         task.setRunTargetId(target.getRunTargetId());
         task.setTargetDeviceId(target.getDeviceId());
-        task.setTaskType(run.getTaskType());
-        task.setProfilePackage(run.getProfilePackage());
-        task.setTaskPayloadJson(run.getTaskPayloadJson());
-        task.setRunConfigJson(run.getRunConfigJson());
-        task.setArtifactPolicyJson(run.getArtifactPolicyJson());
-        task.setPriority(run.getPriority());
-        task.setLabelsJson(run.getLabelsJson());
-        task.setSource(run.getSource());
+        task.setTaskType(previousTask.getTaskType());
+        task.setProfilePackage(previousTask.getProfilePackage());
+        task.setTaskPayloadJson(previousTask.getTaskPayloadJson());
+        task.setRunConfigJson(previousTask.getRunConfigJson());
+        task.setArtifactPolicyJson(previousTask.getArtifactPolicyJson());
+        task.setPriority(previousTask.getPriority());
+        task.setLabelsJson(previousTask.getLabelsJson());
+        task.setSource(previousTask.getSource());
         task.setScheduleVersion(null);
         task.setIdempotencyKey(run.getRunId() + ":" + target.getRunTargetId() + ":" + attemptOrdinal);
         task.setStatus(DomainValues.TASK_STATUS_QUEUED);
-        task.setCreatedBy(run.getCreatedBy());
+        task.setCreatedBy(previousTask.getCreatedBy());
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
         taskMapper.insert(task);
@@ -544,7 +624,11 @@ public class ExperimentRunService {
     }
 
     private int normalizeMaxRetriesPerDevice(Integer maxRetriesPerDevice) {
-        return maxRetriesPerDevice == null ? DEFAULT_MAX_RETRIES_PER_DEVICE : maxRetriesPerDevice;
+        int normalized = maxRetriesPerDevice == null ? DEFAULT_MAX_RETRIES_PER_DEVICE : maxRetriesPerDevice;
+        if (normalized < 0) {
+            throw ControlApiExceptions.badRequest(ControlErrorCode.EXPERIMENT_RUN_INVALID);
+        }
+        return normalized;
     }
 
     private long normalizeQueueTimeoutMs(Long queueTimeoutMs) {
@@ -561,6 +645,26 @@ public class ExperimentRunService {
                                                 TaskRequestValidator.NormalizedTaskRequest normalizedTask,
                                                 int maxRetriesPerDevice,
                                                 long queueTimeoutMs) {
+        return createRunEntity(
+                name,
+                description,
+                poolId,
+                normalizedTask,
+                normalizedTask.profilePackage(),
+                jsonCodec.write(normalizedTask.taskPayload()),
+                maxRetriesPerDevice,
+                queueTimeoutMs
+        );
+    }
+
+    private ExperimentRunEntity createRunEntity(String name,
+                                                String description,
+                                                String poolId,
+                                                TaskRequestValidator.NormalizedTaskRequest normalizedTask,
+                                                String profilePackage,
+                                                String taskPayloadJson,
+                                                int maxRetriesPerDevice,
+                                                long queueTimeoutMs) {
         long now = clock.millis();
         ExperimentRunEntity run = new ExperimentRunEntity();
         run.setRunId(idGenerator.nextRunId());
@@ -569,8 +673,8 @@ public class ExperimentRunService {
         run.setPoolId(poolId);
         run.setStatus(DomainValues.RUN_STATUS_QUEUED);
         run.setTaskType(normalizedTask.taskType());
-        run.setProfilePackage(normalizedTask.profilePackage());
-        run.setTaskPayloadJson(jsonCodec.write(normalizedTask.taskPayload()));
+        run.setProfilePackage(profilePackage);
+        run.setTaskPayloadJson(taskPayloadJson);
         run.setRunConfigJson(jsonCodec.write(normalizedTask.runConfig()));
         run.setArtifactPolicyJson(jsonCodec.write(normalizedTask.artifactPolicy()));
         run.setPriority(normalizedTask.priority());
@@ -675,6 +779,7 @@ public class ExperimentRunService {
         return new ExperimentRunTargetResponse(
                 target.getRunTargetId(),
                 target.getDeviceId(),
+                target.getSequenceId(),
                 target.getStatus(),
                 target.getAttemptCount(),
                 target.getCurrentTaskId(),
@@ -805,5 +910,18 @@ public class ExperimentRunService {
             normalized.add(trimmed);
         }
         return new ArrayList<>(normalized);
+    }
+
+    private record TargetTaskSpec(
+            String taskType,
+            String profilePackage,
+            String taskPayloadJson,
+            String runConfigJson,
+            String artifactPolicyJson,
+            int priority,
+            String labelsJson,
+            String source,
+            String createdBy
+    ) {
     }
 }

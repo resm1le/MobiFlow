@@ -418,6 +418,7 @@ public class AdminApiService {
                 event.getState(),
                 event.getCode(),
                 event.getMessage(),
+                event.getPayloadJson() == null ? null : jsonCodec.readMap(event.getPayloadJson()),
                 event.getTs()
         );
     }

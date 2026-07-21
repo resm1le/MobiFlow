@@ -717,6 +717,7 @@ public final class PersistenceModels {
         private String runTargetId;
         private String runId;
         private String deviceId;
+        private String sequenceId;
         private String status;
         private int attemptCount;
         private String currentTaskId;
@@ -749,6 +750,14 @@ public final class PersistenceModels {
 
         public void setDeviceId(String deviceId) {
             this.deviceId = deviceId;
+        }
+
+        public String getSequenceId() {
+            return sequenceId;
+        }
+
+        public void setSequenceId(String sequenceId) {
+            this.sequenceId = sequenceId;
         }
 
         public String getStatus() {
@@ -1047,9 +1056,11 @@ public final class PersistenceModels {
         private Integer stepIndex;
         private Integer actionIndex;
         private String eventType;
+        private String eventKey;
         private String state;
         private String code;
         private String message;
+        private String payloadJson;
         private long ts;
 
         public Long getId() {
@@ -1124,6 +1135,14 @@ public final class PersistenceModels {
             this.eventType = eventType;
         }
 
+        public String getEventKey() {
+            return eventKey;
+        }
+
+        public void setEventKey(String eventKey) {
+            this.eventKey = eventKey;
+        }
+
         public String getState() {
             return state;
         }
@@ -1146,6 +1165,14 @@ public final class PersistenceModels {
 
         public void setMessage(String message) {
             this.message = message;
+        }
+
+        public String getPayloadJson() {
+            return payloadJson;
+        }
+
+        public void setPayloadJson(String payloadJson) {
+            this.payloadJson = payloadJson;
         }
 
         public long getTs() {

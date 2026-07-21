@@ -104,6 +104,39 @@ download endpoint during the migration.
 Audit timeline lookup is exposed as the MCP tool `query_audits`. It delegates to
 the existing audit query service.
 
+### Heterogeneous Runs
+
+`create_heterogeneous_run` creates one governed run whose targets may carry
+different resolved waypoint sequences and Android profiles. The caller supplies
+each dispatch entry as `sequenceId + profilePackage + taskPayload + select`.
+`select` is exactly one of a non-empty `deviceIds` selector or a positive `count`
+with required/excluded tags. Named devices reserve capacity first; tag selectors
+then consume device-id-sorted candidates in dispatch order. Device de-duplication
+is guaranteed within one create request, not across concurrently created runs.
+
+This tool accepts already resolved Agent payloads. Sequence catalog lookup and AI
+drafting (`resolve_sequence` / `draft_sequence`) remain outside this protocol.
+Creation uses normal explicit approval. For mixed profiles the run-level
+`profilePackage` is null and the run-level `taskPayload` is `{}`; each target's
+current task is authoritative.
+
+The same operation is available to operators as `POST /api/runs/heterogeneous`.
+
+### Waypoint Evidence
+
+`record_waypoint_segments` writes terminal-attempt evidence without driving a
+device action. It is audited, replay-safe, annotated idempotent, and does not
+require approval. Input segments use the Agent fields
+`step_id/behavior_label/entered_at_ms/arrived_at_ms/dwell_ms`; callers cannot
+provide device or sequence identity. Platform derives those values through the
+trusted `attempt -> task -> run target` relationship.
+
+Segments are stored per attempt as `WAYPOINT_SEGMENT` events. `COMPLETE` has all
+three timestamps, `INTERRUPTED` has entered time only, and `INCOMPLETE` has no
+timestamps. Interrupted and incomplete segments are not complete pcap windows.
+The `(attempt_id,event_key)` key makes equal replays a no-op and rejects changed
+payloads. Retries keep independent evidence on their own attempt.
+
 ## Compatibility Tool Runtime
 
 `/tools/**` remains available as the internal compatibility protocol and rollback

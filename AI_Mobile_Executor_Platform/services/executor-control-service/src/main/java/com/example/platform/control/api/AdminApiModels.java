@@ -125,6 +125,7 @@ public final class AdminApiModels {
             String state,
             String code,
             String message,
+            Map<String, Object> payload,
             long ts
     ) {
     }
@@ -216,6 +217,40 @@ public final class AdminApiModels {
     ) {
     }
 
+    public record CreateHeterogeneousRunRequest(
+            @NotBlank String name,
+            String description,
+            @NotBlank String taskType,
+            @NotNull ExecutorApiModels.RunConfig runConfig,
+            @NotNull ExecutorApiModels.ArtifactPolicy artifactPolicy,
+            Integer priority,
+            List<String> labels,
+            String source,
+            String createdBy,
+            @PositiveOrZero Integer maxRetriesPerDevice,
+            @PositiveOrZero Long queueTimeoutMs,
+            @NotNull List<HeterogeneousDispatchEntry> dispatch
+    ) {
+    }
+
+    public record HeterogeneousDispatchEntry(
+            @NotBlank String sequenceId,
+            @NotBlank
+            @Pattern(regexp = "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", message = "PROFILE_PACKAGE_INVALID")
+            String profilePackage,
+            @NotNull Map<String, Object> taskPayload,
+            @NotNull DeviceSelector select
+    ) {
+    }
+
+    public record DeviceSelector(
+            Integer count,
+            List<String> deviceIds,
+            List<String> requiredTags,
+            List<String> excludedTags
+    ) {
+    }
+
     public record RunStatusCounts(
             int totalTargets,
             int queued,
@@ -230,6 +265,7 @@ public final class AdminApiModels {
     public record ExperimentRunTargetResponse(
             String runTargetId,
             String deviceId,
+            String sequenceId,
             String status,
             int attemptCount,
             String currentTaskId,

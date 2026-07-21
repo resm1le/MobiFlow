@@ -9,6 +9,7 @@ import com.example.platform.control.domain.DomainValues;
 import com.example.platform.control.domain.PersistenceModels.DeviceRuntimeStateEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskAttemptEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskEntity;
+import com.example.platform.control.domain.PersistenceModels.RunEventEntity;
 import com.example.platform.control.infrastructure.mapper.ArtifactMapper;
 import com.example.platform.control.infrastructure.mapper.DeviceCommandMapper;
 import com.example.platform.control.infrastructure.mapper.DeviceMapper;
@@ -47,6 +48,7 @@ class AdminApiServiceTest {
     private TaskAttemptMapper attemptMapper;
     private DeviceCommandMapper commandMapper;
     private ArtifactMapper artifactMapper;
+    private RunEventMapper runEventMapper;
     private ArtifactObjectStore artifactObjectStore;
     private IdGenerator idGenerator;
     private ControlStateRules controlStateRules;
@@ -61,7 +63,7 @@ class AdminApiServiceTest {
         taskMapper = Mockito.mock(TaskMapper.class);
         attemptMapper = Mockito.mock(TaskAttemptMapper.class);
         commandMapper = Mockito.mock(DeviceCommandMapper.class);
-        RunEventMapper runEventMapper = Mockito.mock(RunEventMapper.class);
+        runEventMapper = Mockito.mock(RunEventMapper.class);
         artifactMapper = Mockito.mock(ArtifactMapper.class);
         artifactObjectStore = Mockito.mock(ArtifactObjectStore.class);
         idGenerator = Mockito.mock(IdGenerator.class);
@@ -106,6 +108,35 @@ class AdminApiServiceTest {
         ArgumentCaptor<TaskEntity> taskCaptor = ArgumentCaptor.forClass(TaskEntity.class);
         verify(taskMapper).insert(taskCaptor.capture());
         assertEquals("com.google.android.apps.maps", taskCaptor.getValue().getProfilePackage());
+    }
+
+    @Test
+    void attemptEventsExposeStructuredPayloadAndKeepLegacyPayloadNull() {
+        RunEventEntity waypoint = new RunEventEntity();
+        waypoint.setAttemptId("attempt-1");
+        waypoint.setTaskId("task-1");
+        waypoint.setDeviceId("device-1");
+        waypoint.setRunId("run-1");
+        waypoint.setEventType("WAYPOINT_SEGMENT");
+        waypoint.setMessage("waypoint_segment:0:COMPLETE");
+        waypoint.setPayloadJson("{\"step_id\":\"logged_in\",\"deviceId\":\"device-1\"}");
+        waypoint.setTs(1_500);
+        RunEventEntity legacy = new RunEventEntity();
+        legacy.setAttemptId("attempt-1");
+        legacy.setTaskId("task-1");
+        legacy.setDeviceId("device-1");
+        legacy.setRunId("run-1");
+        legacy.setEventType("STEP");
+        legacy.setMessage("legacy");
+        legacy.setTs(1_000);
+        when(attemptMapper.findById("attempt-1")).thenReturn(new TaskAttemptEntity());
+        when(runEventMapper.findByAttemptId("attempt-1")).thenReturn(List.of(legacy, waypoint));
+
+        var events = adminApiService.getAttemptEvents("attempt-1");
+
+        assertEquals(null, events.get(0).payload());
+        assertEquals("logged_in", events.get(1).payload().get("step_id"));
+        assertEquals("device-1", events.get(1).payload().get("deviceId"));
     }
 
     @Test

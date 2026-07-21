@@ -53,6 +53,13 @@ public final class ControlErrorCode {
     public static final String DEVICE_STATE_INVALID = "DEVICE_STATE_INVALID";
     public static final String DEVICE_POOL_INVALID = "DEVICE_POOL_INVALID";
     public static final String EXPERIMENT_RUN_INVALID = "EXPERIMENT_RUN_INVALID";
+    public static final String HETEROGENEOUS_RUN_INVALID = "HETEROGENEOUS_RUN_INVALID";
+    public static final String DISPATCH_SELECTOR_INVALID = "DISPATCH_SELECTOR_INVALID";
+    public static final String DISPATCH_DEVICE_UNAVAILABLE = "DISPATCH_DEVICE_UNAVAILABLE";
+    public static final String DISPATCH_CAPACITY_INSUFFICIENT = "DISPATCH_CAPACITY_INSUFFICIENT";
+    public static final String DISPATCH_DEVICE_CONFLICT = "DISPATCH_DEVICE_CONFLICT";
+    public static final String WAYPOINT_SEGMENT_INVALID = "WAYPOINT_SEGMENT_INVALID";
+    public static final String WAYPOINT_SEGMENT_CONFLICT = "WAYPOINT_SEGMENT_CONFLICT";
 
     private ControlErrorCode() {
     }

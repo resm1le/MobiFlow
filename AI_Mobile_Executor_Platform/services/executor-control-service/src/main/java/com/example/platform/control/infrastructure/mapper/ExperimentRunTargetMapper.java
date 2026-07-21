@@ -14,10 +14,10 @@ public interface ExperimentRunTargetMapper {
 
     @Insert("""
             INSERT INTO experiment_run_targets (
-                run_target_id, run_id, device_id, status, attempt_count, current_task_id, latest_attempt_id,
+                run_target_id, run_id, device_id, sequence_id, status, attempt_count, current_task_id, latest_attempt_id,
                 failure_reason, created_at, updated_at, started_at, finished_at
             ) VALUES (
-                #{target.runTargetId}, #{target.runId}, #{target.deviceId}, #{target.status}, #{target.attemptCount},
+                #{target.runTargetId}, #{target.runId}, #{target.deviceId}, #{target.sequenceId}, #{target.status}, #{target.attemptCount},
                 #{target.currentTaskId}, #{target.latestAttemptId}, #{target.failureReason}, #{target.createdAt},
                 #{target.updatedAt}, #{target.startedAt}, #{target.finishedAt}
             )
@@ -25,7 +25,7 @@ public interface ExperimentRunTargetMapper {
     void insert(@Param("target") ExperimentRunTargetEntity target);
 
     @Select("""
-            SELECT run_target_id, run_id, device_id, status, attempt_count, current_task_id, latest_attempt_id,
+            SELECT run_target_id, run_id, device_id, sequence_id, status, attempt_count, current_task_id, latest_attempt_id,
                    failure_reason, created_at, updated_at, started_at, finished_at
             FROM experiment_run_targets
             WHERE run_target_id = #{runTargetId}
@@ -33,7 +33,7 @@ public interface ExperimentRunTargetMapper {
     ExperimentRunTargetEntity findById(@Param("runTargetId") String runTargetId);
 
     @Select("""
-            SELECT run_target_id, run_id, device_id, status, attempt_count, current_task_id, latest_attempt_id,
+            SELECT run_target_id, run_id, device_id, sequence_id, status, attempt_count, current_task_id, latest_attempt_id,
                    failure_reason, created_at, updated_at, started_at, finished_at
             FROM experiment_run_targets
             WHERE run_target_id = #{runTargetId}
@@ -42,7 +42,7 @@ public interface ExperimentRunTargetMapper {
     ExperimentRunTargetEntity lockById(@Param("runTargetId") String runTargetId);
 
     @Select("""
-            SELECT run_target_id, run_id, device_id, status, attempt_count, current_task_id, latest_attempt_id,
+            SELECT run_target_id, run_id, device_id, sequence_id, status, attempt_count, current_task_id, latest_attempt_id,
                    failure_reason, created_at, updated_at, started_at, finished_at
             FROM experiment_run_targets
             WHERE run_id = #{runId}
@@ -51,7 +51,7 @@ public interface ExperimentRunTargetMapper {
     List<ExperimentRunTargetEntity> findByRunId(@Param("runId") String runId);
 
     @Select("""
-            SELECT run_target_id, run_id, device_id, status, attempt_count, current_task_id, latest_attempt_id,
+            SELECT run_target_id, run_id, device_id, sequence_id, status, attempt_count, current_task_id, latest_attempt_id,
                    failure_reason, created_at, updated_at, started_at, finished_at
             FROM experiment_run_targets
             WHERE status IN ('QUEUED', 'RETRY_PENDING')

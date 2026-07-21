@@ -19,6 +19,7 @@ final class ExperimentRunSelectors {
                                Set<String> excludedTags,
                                JsonCodec jsonCodec) {
         if (runtime == null || !runtime.isRegistered() || !runtime.isOnline()
+                || runtime.isBusy()
                 || DomainValues.DEVICE_STATUS_QUIESCED.equals(runtime.getStatus())) {
             return false;
         }

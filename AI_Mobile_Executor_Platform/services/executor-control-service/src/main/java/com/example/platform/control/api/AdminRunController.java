@@ -1,6 +1,7 @@
 package com.example.platform.control.api;
 
 import com.example.platform.control.api.AdminApiModels.CreateExperimentRunRequest;
+import com.example.platform.control.api.AdminApiModels.CreateHeterogeneousRunRequest;
 import com.example.platform.control.api.AdminApiModels.ExperimentRunDetailResponse;
 import com.example.platform.control.api.AdminApiModels.ExperimentRunSummaryResponse;
 import com.example.platform.control.application.ExperimentRunService;
@@ -32,6 +33,11 @@ public class AdminRunController {
     @PostMapping
     public ExperimentRunDetailResponse create(@Valid @RequestBody CreateExperimentRunRequest request) {
         return experimentRunService.createRun(request);
+    }
+
+    @PostMapping("/heterogeneous")
+    public ExperimentRunDetailResponse createHeterogeneous(@Valid @RequestBody CreateHeterogeneousRunRequest request) {
+        return experimentRunService.createHeterogeneousRun(request);
     }
 
     @GetMapping("/{runId}")

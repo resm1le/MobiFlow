@@ -25,19 +25,21 @@ class McpFacadeServiceTest {
         ToolResourceService resourceService = mock(ToolResourceService.class);
         when(toolFacadeService.catalog()).thenReturn(new ToolApiModels.ToolCatalogResponse(
                 "tool-envelope-v2",
-                List.of(new ToolApiModels.ToolCatalogItem(
-                        "list_devices",
-                        "List Devices",
-                        "List devices.",
-                        Map.of("type", "object"),
-                        Map.of("type", "array"),
-                        "inline",
-                        "stable",
-                        "read",
-                        "DISCOVERY",
-                        new ToolApiModels.ToolGovernance(false, null),
-                        List.of("observation")
-                ))
+                List.of(
+                        new ToolApiModels.ToolCatalogItem(
+                                "list_devices", "List Devices", "List devices.",
+                                Map.of("type", "object"), Map.of("type", "array"),
+                                "inline", "stable", "read", "DISCOVERY",
+                                new ToolApiModels.ToolGovernance(false, null), List.of("observation")
+                        ),
+                        new ToolApiModels.ToolCatalogItem(
+                                "record_waypoint_segments", "Record Waypoint Segments", "Record evidence.",
+                                Map.of("type", "object"), Map.of("type", "object"),
+                                "inline", "stable", "side_effect", "ADVISORY",
+                                new ToolApiModels.ToolGovernance(false, null),
+                                List.of("evidence", "lineage", "idempotent")
+                        )
+                )
         ));
         McpFacadeService service = new McpFacadeService(toolFacadeService, resourceService, new ObjectMapper());
 
@@ -51,12 +53,20 @@ class McpFacadeServiceTest {
         assertNull(response.error());
         Map<?, ?> result = (Map<?, ?>) response.result();
         List<?> tools = (List<?>) result.get("tools");
-        assertEquals(3, tools.size());
+        assertEquals(4, tools.size());
         Map<?, ?> first = (Map<?, ?>) tools.get(0);
         assertEquals("list_devices", first.get("name"));
         assertEquals(Map.of("type", "object"), first.get("inputSchema"));
         assertTrue(tools.stream().anyMatch(item -> ((Map<?, ?>) item).get("name").equals("resolve_confirmation")));
         assertTrue(tools.stream().anyMatch(item -> ((Map<?, ?>) item).get("name").equals("query_audits")));
+        Map<?, ?> recordTool = tools.stream()
+                .map(item -> (Map<?, ?>) item)
+                .filter(item -> item.get("name").equals("record_waypoint_segments"))
+                .findFirst()
+                .orElseThrow();
+        Map<?, ?> annotations = (Map<?, ?>) recordTool.get("annotations");
+        assertEquals(false, annotations.get("readOnlyHint"));
+        assertEquals(true, annotations.get("idempotentHint"));
     }
 
     @Test

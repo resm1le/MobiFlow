@@ -1,7 +1,10 @@
 package com.example.platform.control.application;
 
 import com.example.platform.control.api.AdminApiModels.CreateExperimentRunRequest;
+import com.example.platform.control.api.AdminApiModels.CreateHeterogeneousRunRequest;
 import com.example.platform.control.api.AdminApiModels.CreateSingleDeviceRunRequest;
+import com.example.platform.control.api.AdminApiModels.DeviceSelector;
+import com.example.platform.control.api.AdminApiModels.HeterogeneousDispatchEntry;
 import com.example.platform.control.api.ExecutorApiModels.ArtifactPolicy;
 import com.example.platform.control.api.ExecutorApiModels.RunConfig;
 import com.example.platform.control.domain.DomainValues;
@@ -67,6 +70,7 @@ class ExperimentRunServiceTest {
         commandMapper = Mockito.mock(DeviceCommandMapper.class);
         idGenerator = Mockito.mock(IdGenerator.class);
         JsonCodec jsonCodec = new JsonCodec(new ObjectMapper());
+        TaskRequestValidator taskRequestValidator = new TaskRequestValidator();
         experimentRunService = new ExperimentRunService(
                 devicePoolMapper,
                 experimentRunMapper,
@@ -78,7 +82,8 @@ class ExperimentRunServiceTest {
                 commandMapper,
                 jsonCodec,
                 idGenerator,
-                new TaskRequestValidator()
+                taskRequestValidator,
+                new HeterogeneousDispatchResolver(deviceMapper, runtimeStateMapper, taskRequestValidator, jsonCodec)
         );
     }
 
@@ -203,6 +208,63 @@ class ExperimentRunServiceTest {
     }
 
     @Test
+    void createHeterogeneousRunPersistsPerTargetSequenceAndTaskSpec() {
+        when(deviceMapper.findAll()).thenReturn(List.of(
+                device("device-1", "default", List.of("lab"), List.of("com.tencent.mm")),
+                device("device-2", "default", List.of("lab"), List.of("com.tencent.mm")),
+                device("device-3", "default", List.of("lab"), List.of("com.tencent.mm")),
+                device("device-4", "default", List.of("lab"), List.of("com.demo.video")),
+                device("device-5", "default", List.of("lab"), List.of("com.demo.video"))
+        ));
+        when(runtimeStateMapper.findAll()).thenReturn(List.of(
+                runtime("device-1", true, true, DomainValues.DEVICE_STATUS_ONLINE),
+                runtime("device-2", true, true, DomainValues.DEVICE_STATUS_ONLINE),
+                runtime("device-3", true, true, DomainValues.DEVICE_STATUS_ONLINE),
+                runtime("device-4", true, true, DomainValues.DEVICE_STATUS_ONLINE),
+                runtime("device-5", true, true, DomainValues.DEVICE_STATUS_ONLINE)
+        ));
+        when(idGenerator.nextRunId()).thenReturn("run-heterogeneous");
+        when(idGenerator.nextRunTargetId()).thenReturn("target-1", "target-2", "target-3", "target-4", "target-5");
+        when(idGenerator.nextTaskId()).thenReturn("task-1", "task-2", "task-3", "task-4", "task-5");
+
+        Map<String, TaskEntity> tasks = new LinkedHashMap<>();
+        List<ExperimentRunTargetEntity> targets = new ArrayList<>();
+        ArgumentCaptor<ExperimentRunEntity> runCaptor = ArgumentCaptor.forClass(ExperimentRunEntity.class);
+        doAnswer(invocation -> { TaskEntity task = invocation.getArgument(0); tasks.put(task.getTaskId(), task); return null; })
+                .when(taskMapper).insert(any(TaskEntity.class));
+        doAnswer(invocation -> { targets.add(invocation.getArgument(0)); return null; })
+                .when(experimentRunTargetMapper).insert(any(ExperimentRunTargetEntity.class));
+        doAnswer(invocation -> null).when(experimentRunMapper).insert(runCaptor.capture());
+        when(experimentRunMapper.findById("run-heterogeneous")).thenAnswer(invocation -> runCaptor.getValue());
+        when(experimentRunTargetMapper.findByRunId("run-heterogeneous")).thenReturn(targets);
+        when(taskMapper.findById(any())).thenAnswer(invocation -> tasks.get(invocation.getArgument(0)));
+
+        var response = experimentRunService.createHeterogeneousRun(new CreateHeterogeneousRunRequest(
+                "mixed", null, "PLUGIN_RUN",
+                new RunConfig(1, 60_000, 0, false, 15_000, 30_000),
+                new ArtifactPolicy(true, true, true), 100, List.of("pcap"), "agent", "agent", 1, 300_000L,
+                List.of(
+                        new HeterogeneousDispatchEntry(
+                                "wechat.text_chat.v1", "com.tencent.mm",
+                                waypointPayload("wechat.text_chat.v1", "wechat_text_chat", "com.tencent.mm"),
+                                new DeviceSelector(3, List.of(), List.of("lab"), List.of())),
+                        new HeterogeneousDispatchEntry(
+                                "demo.video_call.v1", "com.demo.video",
+                                waypointPayload("demo.video_call.v1", "demo_video_call", "com.demo.video"),
+                                new DeviceSelector(2, List.of(), List.of("lab"), List.of()))
+                )
+        ));
+
+        assertEquals(5, response.targets().size());
+        assertEquals(null, response.run().profilePackage());
+        assertEquals(Map.of(), response.taskPayload());
+        assertEquals(List.of("wechat.text_chat.v1", "wechat.text_chat.v1", "wechat.text_chat.v1", "demo.video_call.v1", "demo.video_call.v1"),
+                targets.stream().map(ExperimentRunTargetEntity::getSequenceId).toList());
+        assertEquals(List.of("com.tencent.mm", "com.tencent.mm", "com.tencent.mm", "com.demo.video", "com.demo.video"),
+                tasks.values().stream().map(TaskEntity::getProfilePackage).toList());
+    }
+
+    @Test
     void onAttemptFinishedQueuesRetryTaskWhenRetryBudgetAllows() {
         ExperimentRunEntity run = new ExperimentRunEntity();
         run.setRunId("run-1");
@@ -230,6 +292,15 @@ class ExperimentRunServiceTest {
         task.setTaskId("task-1");
         task.setRunId("run-1");
         task.setRunTargetId("target-1");
+        task.setTaskType("PLUGIN_RUN");
+        task.setProfilePackage("com.target.profile");
+        task.setTaskPayloadJson("{\"goal\":\"target-specific\"}");
+        task.setRunConfigJson("{\"loopCount\":2}");
+        task.setArtifactPolicyJson("{\"uploadLog\":true}");
+        task.setPriority(77);
+        task.setLabelsJson("[\"target\"]");
+        task.setSource("target-source");
+        task.setCreatedBy("target-owner");
 
         TaskAttemptEntity attempt = new TaskAttemptEntity();
         attempt.setAttemptId("attempt-1");
@@ -254,7 +325,56 @@ class ExperimentRunServiceTest {
         assertEquals("device-1", taskCaptor.getValue().getTargetDeviceId());
         assertEquals("run-1", taskCaptor.getValue().getRunId());
         assertEquals("target-1", taskCaptor.getValue().getRunTargetId());
+        assertEquals("com.target.profile", taskCaptor.getValue().getProfilePackage());
+        assertEquals("{\"goal\":\"target-specific\"}", taskCaptor.getValue().getTaskPayloadJson());
+        assertEquals(77, taskCaptor.getValue().getPriority());
+        assertEquals("target-owner", taskCaptor.getValue().getCreatedBy());
         assertEquals(DomainValues.RUN_STATUS_RUNNING, run.getStatus());
+    }
+
+    @Test
+    void queuedTimeoutRetryClonesCurrentTargetTaskSpec() {
+        ExperimentRunEntity run = new ExperimentRunEntity();
+        run.setRunId("run-1");
+        run.setStatus(DomainValues.RUN_STATUS_QUEUED);
+        run.setMaxRetriesPerDevice(1);
+        run.setQueueTimeoutMs(1_000);
+
+        ExperimentRunTargetEntity target = new ExperimentRunTargetEntity();
+        target.setRunTargetId("target-1");
+        target.setRunId("run-1");
+        target.setDeviceId("device-1");
+        target.setStatus(DomainValues.RUN_TARGET_STATUS_QUEUED);
+        target.setAttemptCount(1);
+        target.setCurrentTaskId("task-1");
+
+        TaskEntity previous = new TaskEntity();
+        previous.setTaskId("task-1");
+        previous.setStatus(DomainValues.TASK_STATUS_QUEUED);
+        previous.setCreatedAt(0);
+        previous.setTaskType("PLUGIN_RUN");
+        previous.setProfilePackage("com.target.profile");
+        previous.setTaskPayloadJson("{\"goal\":\"target-specific\"}");
+        previous.setRunConfigJson("{\"loopCount\":2}");
+        previous.setArtifactPolicyJson("{\"uploadLog\":true}");
+        previous.setPriority(77);
+        previous.setLabelsJson("[\"target\"]");
+        previous.setSource("target-source");
+        previous.setCreatedBy("target-owner");
+
+        when(experimentRunTargetMapper.findPendingQueueTargets()).thenReturn(List.of(target));
+        when(experimentRunMapper.lockById("run-1")).thenReturn(run);
+        when(taskMapper.findById("task-1")).thenReturn(previous);
+        when(experimentRunTargetMapper.findByRunId("run-1")).thenReturn(List.of(target));
+        when(idGenerator.nextTaskId()).thenReturn("task-2");
+        ArgumentCaptor<TaskEntity> taskCaptor = ArgumentCaptor.forClass(TaskEntity.class);
+
+        assertEquals(1, experimentRunService.reconcileQueuedTimeouts(2_000));
+
+        verify(taskMapper).insert(taskCaptor.capture());
+        assertEquals("com.target.profile", taskCaptor.getValue().getProfilePackage());
+        assertEquals("{\"goal\":\"target-specific\"}", taskCaptor.getValue().getTaskPayloadJson());
+        assertEquals("target-owner", taskCaptor.getValue().getCreatedBy());
     }
 
     @Test
@@ -373,6 +493,30 @@ class ExperimentRunServiceTest {
         task.setTaskId(taskId);
         task.setStatus(DomainValues.TASK_STATUS_RUNNING);
         return task;
+    }
+
+    private Map<String, Object> waypointPayload(String sequenceId, String behaviorLabel, String profilePackage) {
+        return Map.of(
+                "goal", "run " + sequenceId,
+                "waypoint_sequence", Map.of(
+                        "sequence_id", sequenceId,
+                        "behavior_label", behaviorLabel,
+                        "profile_package", profilePackage,
+                        "waypoints", List.of(Map.of(
+                                "waypoint_id", "ready",
+                                "description", "Reach ready state.",
+                                "arrival_spec", Map.of(
+                                        "verification_id", "verify:ready",
+                                        "target_kind", "task",
+                                        "target_id", "ready",
+                                        "success_checks", List.of(Map.of(
+                                                "check_id", "ready-visible",
+                                                "description", "Ready state is visible."
+                                        ))
+                                )
+                        ))
+                )
+        );
     }
 
     private String json(List<String> values) {
