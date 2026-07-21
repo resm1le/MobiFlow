@@ -39,6 +39,7 @@ natural language task
 - `ExecutionTraceExporter` with JSON, Markdown, redaction, file export, and node-level timeline output.
 - Scenario regression suite grouped by normal, recovery, approval, fixed-script contrast, and memory capabilities, with report export.
 - `TaskIntakeService` and `TaskInterpreter` for converting bounded natural-language mobile goals into validated dynamic task sessions.
+- Versioned `SequenceCatalog` resolution and model-assisted, human-reviewed `SequenceDraftService` waypoint drafts.
 
 ## Package Responsibilities
 
@@ -54,6 +55,7 @@ mobiflow_agent/
   platform/     simulated mobile adapter and platform contracts
   model/        provider-agnostic generation and embedding runtime
   control/      dispatcher, policy, and compatibility imports
+  waypoint/     waypoint models, compiler, packaged sequence catalog, and drafting service
   common/       canonical contracts and id helpers
 ```
 
@@ -104,6 +106,31 @@ if result.session is not None:
 ```
 
 `submit_test_case` runs the four-stage pipeline (`TestCaseParser → TestCaseValidator → AssertionSynthesizer → TestCaseAssembler`) to compile prose into a `TestCase` and a `VerificationSpec`. Synthesized assertions are confined to the six-member predicate vocabulary (`exists, not_exists, equals, contains, any_equals, any_contains`) over the simulation fact catalog (`mobile_observation_summary`, `simulated_screen_snapshot`, `simulated_ui_tree`); out-of-vocabulary assertions are rejected and retried once before asking for clarification. Real-device observation-fact enrichment is a separate follow-up. `create_session_from_text` remains the template-bounded path for the demo login, permission popup contrast, slow-loading recovery, and approval-required destructive-action scenarios.
+
+## Waypoint Sequence Catalog and Drafting
+
+```python
+from mobiflow_agent.waypoint import (
+    SequenceCatalog,
+    SequenceDraftRequest,
+    SequenceDraftService,
+)
+
+catalog = SequenceCatalog.default()
+sequence = catalog.resolve_sequence("wechat.text_chat.v1")
+
+draft_service = SequenceDraftService(model_runtime=configured_model_runtime)
+result = draft_service.draft_sequence(
+    SequenceDraftRequest(
+        source_text="Open WeChat, reach the home screen, then open the target chat.",
+        sequence_id="wechat.text_chat.v2",
+        behavior_label="wechat_text_chat",
+        profile_package="com.tencent.mm",
+    )
+)
+```
+
+`SequenceCatalog` is a deterministic, read-only view of versioned JSON resources packaged with the Agent. Every resolve returns a deep copy, so caller mutation cannot change the catalog. `SequenceDraftService` requires a configured model runtime and reuses intake parsing plus per-waypoint assertion synthesis. A ready result is still only a draft: it must be reviewed and added as a versioned JSON file through normal code review. Drafting never writes the catalog, creates a session or run, calls Platform tools, or performs device actions. Heterogeneous run creation remains a P2-3b concern and continues to require Platform approval.
 
 ## Scenario Regression Suite
 

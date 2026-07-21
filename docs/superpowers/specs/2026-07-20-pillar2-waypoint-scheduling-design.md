@@ -122,16 +122,16 @@ DispatchEntry:
 
 非法输入处理(在 Agent 侧编译期拒绝,不下发 MCP):`sequence_id` 无法解析、`select` 两种模式混用或都空、`count<=0`、`device_ids` 含未注册设备 → 返回结构化错误给对话层,不建 run。NL → `sequence_id`/`select` 的映射由 `IntentPlanner` 负责,本轮可先支持"显式点名序列 + 显式设备条件"的受限自然语言,复杂 NL 解析后置。
 
-落地 MCP 工具序列:
+落地调用序列:
 
 1. `list_devices` / `list_device_pools`(现有)——寻址候选。
-2. `resolve_sequence`(**新增**):按 `sequence_id` 取序列定义(手写库或 AI 草稿)。
+2. Agent `SequenceCatalog.resolve_sequence`(**新增,确定性只读**):按完整版本 `sequence_id` 取正式序列定义。Platform 不复制目录或 Pydantic schema。
 3. `create_heterogeneous_run`(**新增,side_effect + explicit 确认**):复用现有 confirmation token 机制。
 4. `observe_run` / `get_run_target`(现有)——回报进度。
 
-对话入口本轮以"Agent 编程接口 + MCP 工具"呈现;UI 只是该接口的一个前端,预留、不做。
+对话入口本轮以"Agent 编程接口 + Platform MCP 工具"呈现;UI 只是该接口的一个前端,预留、不做。若未来需要远程暴露 `resolve_sequence`/`draft_sequence`,只能增加指向 Agent 服务的薄代理,不能让 Platform 成为第二份序列权威。
 
-**航点来源混合(需求 8)**:手写序列进版本化序列库;AI 辅助草稿复用 intake 流水线(`TestCaseParser→…→AssertionSynthesizer`)从自然语言/现有死脚本反向提炼 `arrival_spec`。新增 `draft_sequence`(analyze 类,只读产草稿,人工精调后入库)。
+**航点来源混合(需求 8)**:手写序列进入 Agent 随包版本化 JSON 目录;AI 辅助草稿由 Agent `SequenceDraftService` 复用 intake 流水线(`TestCaseParser→航点分解→逐航点 AssertionSynthesizer`)从自然语言/现有死脚本反向提炼 `arrival_spec`。`draft_sequence` 是 analyze 类只读编程接口,只产完整草稿和诊断;人工精调、评审后才能以新 `.vN` 文件入库,绝不自动写目录。
 
 ---
 
@@ -197,8 +197,10 @@ DispatchEntry:
 ## 10. 关键实现文件(供后续实现计划)
 
 - `AI_Mobile_Executor_Platform/services/executor-control-service/src/main/java/com/example/platform/control/application/ExperimentRunService.java` — `createRun`/`selectRunDevices`/`createInitialTargetTask` 异构改造核心
-- `AI_Mobile_Executor_Platform/services/executor-control-service/src/main/java/com/example/platform/control/application/ToolFacadeService.java` — 新增 `create_heterogeneous_run`/`resolve_sequence`/`draft_sequence` MCP 工具
+- `AI_Mobile_Executor_Platform/services/executor-control-service/src/main/java/com/example/platform/control/application/ToolFacadeService.java` — 暴露受显式确认保护的 `create_heterogeneous_run`;只消费 Agent 已解析 payload
 - `AI_Mobile_Executor_Platform/services/executor-control-service/src/main/java/com/example/platform/control/domain/PersistenceModels.java` — `ExperimentRunTargetEntity` 增 `sequenceId`、task payload per-target
+- `MobiFlow_Agent/mobiflow_agent/waypoint/catalog.py` 与 `waypoint/sequences/*.json` — Agent 唯一权威的确定性版本化序列目录与 `resolve_sequence`
+- `MobiFlow_Agent/mobiflow_agent/waypoint/drafting.py` — 只读 `draft_sequence`、航点分解与逐航点 assertion synthesis
 - `MobiFlow_Agent/mobiflow_agent/common/contracts.py` — 航点序列模型复用/扩展 `VerificationSpec`
 - `MobiFlow_Agent/mobiflow_agent/graph/builder.py` 与 `MobiFlow_Agent/mobiflow_agent/runtime/trace_export.py` — 铺路/失败判定闭环 + 航点级 timeline 导出
 - `MobiFlow_Agent/mobiflow_agent/graph/nodes.py` — `decide_step` 路由(`:114-178`,`allowed_side_effects` allowlist `:144`,`off_standard_path` 终态出口)
