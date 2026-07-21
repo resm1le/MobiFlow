@@ -1,0 +1,22 @@
+{
+  "sequence_id": "wechat.video_call.v1",
+  "behavior_label": "wechat_video_call",
+  "profile_package": "com.tencent.mm",
+  "waypoints": [
+    {
+      "waypoint_id": "call_connected",
+      "description": "Reach the connected video-call screen.",
+      "arrival_spec": {
+        "verification_id": "verify:call_connected",
+        "target_kind": "task",
+        "target_id": "call_connected",
+        "success_checks": [
+          {
+            "check_id": "call-connected-visible",
+            "description": "The connected video-call screen is visible."
+          }
+        ]
+      }
+    }
+  ]
+}

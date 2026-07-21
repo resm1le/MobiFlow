@@ -20,3 +20,6 @@ addopts = "-p no:cacheprovider"
 
 [tool.setuptools.packages.find]
 include = ["mobiflow_agent", "mobiflow_agent.*"]
+
+[tool.setuptools.package-data]
+mobiflow_agent = ["waypoint/sequences/*.json"]

@@ -1,0 +1,22 @@
+{
+  "sequence_id": "wechat.text_chat.v1",
+  "behavior_label": "wechat_text_chat",
+  "profile_package": "com.tencent.mm",
+  "waypoints": [
+    {
+      "waypoint_id": "logged_in",
+      "description": "Reach the logged-in home screen.",
+      "arrival_spec": {
+        "verification_id": "verify:logged_in",
+        "target_kind": "task",
+        "target_id": "logged_in",
+        "success_checks": [
+          {
+            "check_id": "logged-in-visible",
+            "description": "The logged-in home screen is visible."
+          }
+        ]
+      }
+    }
+  ]
+}

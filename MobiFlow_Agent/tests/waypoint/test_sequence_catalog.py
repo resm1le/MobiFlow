@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib import resources
 from pathlib import Path
 
 import pytest
@@ -159,3 +160,29 @@ def test_missing_directory_is_rejected(tmp_path: Path) -> None:
 
     assert exc_info.value.code == "SEQUENCE_CATALOG_NOT_FOUND"
     assert exc_info.value.source == str(missing)
+
+
+def test_default_catalog_loads_packaged_sequences_in_id_order() -> None:
+    catalog = SequenceCatalog.default()
+
+    assert [item.sequence_id for item in catalog.list_sequences()] == [
+        "wechat.text_chat.v1",
+        "wechat.video_call.v1",
+    ]
+    for sequence_id in ("wechat.text_chat.v1", "wechat.video_call.v1"):
+        sequence = catalog.resolve_sequence(sequence_id)
+        assert sequence.profile_package == "com.tencent.mm"
+        assert sequence.waypoints
+
+
+def test_default_sequence_json_files_are_package_resources() -> None:
+    directory = resources.files("mobiflow_agent.waypoint").joinpath("sequences")
+
+    assert sorted(
+        entry.name
+        for entry in directory.iterdir()
+        if entry.is_file() and entry.name.endswith(".json")
+    ) == [
+        "wechat.text_chat.v1.json",
+        "wechat.video_call.v1.json",
+    ]
