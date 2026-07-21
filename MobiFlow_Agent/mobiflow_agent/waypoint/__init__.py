@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from mobiflow_agent.waypoint.catalog import (
     SEQUENCE_ID_PATTERN,
     SequenceCatalog,
@@ -20,8 +22,30 @@ __all__ = [
     "SequenceCatalog",
     "SequenceCatalogError",
     "SequenceSummary",
+    "DraftWaypointCandidate",
+    "SequenceDraftRequest",
+    "SequenceDraftResult",
+    "SequenceDraftSourceKind",
+    "SequenceWaypointDraftCandidate",
     "Waypoint",
     "WaypointSequence",
     "WaypointStrength",
+    "WaypointDecompositionResult",
+    "WaypointDraftDecomposer",
     "compile_sequence_to_plan",
 ]
+
+
+def __getattr__(name: str):
+    if name in {
+        "DraftWaypointCandidate",
+        "SequenceDraftRequest",
+        "SequenceDraftResult",
+        "SequenceDraftSourceKind",
+        "SequenceWaypointDraftCandidate",
+        "WaypointDecompositionResult",
+        "WaypointDraftDecomposer",
+    }:
+        module = import_module("mobiflow_agent.waypoint.drafting")
+        return getattr(module, name)
+    raise AttributeError(f"module 'mobiflow_agent.waypoint' has no attribute {name!r}")
