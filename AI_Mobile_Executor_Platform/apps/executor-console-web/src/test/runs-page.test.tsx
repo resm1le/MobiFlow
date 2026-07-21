@@ -15,11 +15,11 @@ vi.mock("../lib/hooks", () => ({
         runId: "run-1",
         name: "Maps batch",
         description: null,
-        poolId: "pool-1",
+        poolId: null,
         status: "RUNNING",
         finalState: null,
         taskType: "demo.navigate",
-        profilePackage: "com.google.android.apps.maps",
+        profilePackage: null,
         priority: 100,
         labels: ["demo"],
         source: "console-run",
@@ -51,6 +51,7 @@ describe("RunsPage", () => {
 
     expect(view.getByText("Maps batch")).toBeInTheDocument();
     expect(view.getByText("run-1")).toBeInTheDocument();
-    expect(view.getByText("com.google.android.apps.maps")).toBeInTheDocument();
+    expect(view.getByText("mixed")).toBeInTheDocument();
+    expect(view.getByText("—")).toBeInTheDocument();
   });
 });

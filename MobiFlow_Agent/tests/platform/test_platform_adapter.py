@@ -4,7 +4,13 @@ from typing import Any
 
 import pytest
 
-from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, ObservationView
+from mobiflow_agent.common.contracts import (
+    EntityKind,
+    ExecutionProposal,
+    ObservationView,
+    VerificationCheck,
+    VerificationSpec,
+)
 from mobiflow_agent.platform.evidence import (
     ATTEMPT_DIAGNOSIS_FACT_ID,
     RUN_ARTIFACTS_FACT_ID,
@@ -18,6 +24,7 @@ from mobiflow_agent.platform.adapter import (
     PlatformAdapterError,
     create_platform_adapter,
 )
+from mobiflow_agent.platform.adapter.mapping import map_run_summary_context, map_run_target_context
 from mobiflow_agent.platform.types import (
     FailureCategory,
     GovernedActionState,
@@ -25,7 +32,10 @@ from mobiflow_agent.platform.types import (
     SuggestedNextAction,
     ToolRiskLevel,
 )
+from mobiflow_agent.runtime.trace_export import ExecutionTraceExporter
 from mobiflow_agent.runtime.state import CallerContext
+from mobiflow_agent.task.plan import TaskPlan, TaskStep, TaskStepKind, TaskStepPolicy
+from mobiflow_agent.task.session import TaskSession
 
 
 class StubTransport:
@@ -54,6 +64,42 @@ class StubMcpTransport:
         if method not in self.responses or not self.responses[method]:
             raise AssertionError(f"Unexpected MCP call: {method}")
         return self.responses[method].pop(0)
+
+
+def _caller_context() -> CallerContext:
+    return CallerContext(
+        session_id="session-1",
+        agent_task_id="task-1",
+        turn_id="turn-1",
+        step_id="step-1",
+    )
+
+
+def _exported_waypoint_segments() -> list[dict[str, Any]]:
+    step = TaskStep(
+        step_id="logged_in",
+        kind=TaskStepKind.DYNAMIC,
+        goal="Reach the logged-in state.",
+        allowed_side_effects=[],
+        verification_spec=VerificationSpec(
+            verification_id="verify:logged_in",
+            target_kind=EntityKind.TASK,
+            target_id="logged_in",
+            success_checks=[VerificationCheck(check_id="visible", description="Home is visible.")],
+        ),
+        policy=TaskStepPolicy(policy_id="policy:logged_in", description="Stop at the home screen."),
+    )
+    session = TaskSession(session_id="trace-session", goal="Log in")
+    session.plan = TaskPlan(
+        plan_id="plan-1",
+        summary="Log in",
+        behavior_label="wechat_text_chat",
+        steps=[step],
+    )
+    session.waypoint_timings = {
+        "logged_in": {"entered_at_ms": 1000, "arrived_at_ms": 1500},
+    }
+    return ExecutionTraceExporter().export_json(session)["waypoint_segments"]
 
 
 def test_get_tool_catalog_maps_catalog_items() -> None:
@@ -132,6 +178,149 @@ def test_mcp_get_tool_catalog_maps_mcp_tools() -> None:
     assert catalog[0].risk_level == ToolRiskLevel.EXECUTION
     assert catalog[0].requires_approval is True
     assert catalog[0].semantic_tags == ["run", "governed"]
+
+
+def test_mcp_record_waypoint_segments_forwards_exported_segments_and_returns_events() -> None:
+    waypoint_segments = _exported_waypoint_segments()
+    events = [
+        {
+            "eventType": "WAYPOINT_SEGMENT",
+            "state": "COMPLETE",
+            "payload": {
+                "sequence_id": "wechat.text_chat.v1",
+                "deviceId": "device-7",
+                **waypoint_segments[0],
+            },
+        }
+    ]
+    transport = StubMcpTransport(
+        {
+            "tools/call": [
+                {
+                    "structuredContent": {
+                        "tool": "record_waypoint_segments",
+                        "status": "completed",
+                        "result": {
+                            "runTargetId": "target-1",
+                            "attemptId": "attempt-1",
+                            "events": events,
+                        },
+                    }
+                }
+            ]
+        }
+    )
+    adapter = McpPlatformAdapter(transport=transport)
+
+    result = adapter.record_waypoint_segments(
+        run_target_id="target-1",
+        attempt_id="attempt-1",
+        waypoint_segments=waypoint_segments,
+        caller_context=_caller_context(),
+    )
+
+    assert result == events
+    assert transport.calls == [
+        (
+            "tools/call",
+            {
+                "name": "record_waypoint_segments",
+                "arguments": {
+                    "runTargetId": "target-1",
+                    "attemptId": "attempt-1",
+                    "waypointSegments": waypoint_segments,
+                },
+                "sessionId": "session-1",
+                "requestId": "record_waypoint_segments:attempt-1",
+                "callerContext": {
+                    "agentTaskId": "task-1",
+                    "turnId": "turn-1",
+                    "stepId": "step-1",
+                },
+            },
+        )
+    ]
+    assert set(transport.calls[0][1]["arguments"]["waypointSegments"][0]) == {
+        "step_id",
+        "behavior_label",
+        "entered_at_ms",
+        "arrived_at_ms",
+        "dwell_ms",
+    }
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"attemptId": "attempt-1", "events": []},
+        {"runTargetId": "target-1", "events": []},
+        {"runTargetId": "other-target", "attemptId": "attempt-1", "events": []},
+        {"runTargetId": "target-1", "attemptId": "other-attempt", "events": []},
+        {"runTargetId": "target-1", "attemptId": "attempt-1", "events": {}},
+    ],
+)
+def test_mcp_record_waypoint_segments_rejects_invalid_platform_contract(result: dict[str, Any]) -> None:
+    adapter = McpPlatformAdapter(
+        transport=StubMcpTransport(
+            {
+                "tools/call": [
+                    {
+                        "structuredContent": {
+                            "tool": "record_waypoint_segments",
+                            "status": "completed",
+                            "result": result,
+                        }
+                    }
+                ]
+            }
+        )
+    )
+
+    with pytest.raises(PlatformAdapterError) as exc_info:
+        adapter.record_waypoint_segments(
+            run_target_id="target-1",
+            attempt_id="attempt-1",
+            waypoint_segments=[],
+            caller_context=_caller_context(),
+        )
+
+    assert exc_info.value.code == "INVALID_PLATFORM_CONTRACT"
+    assert exc_info.value.retryable is False
+
+
+def test_run_mapping_accepts_nullable_heterogeneous_fields_and_legacy_target() -> None:
+    summary = map_run_summary_context(
+        {
+            "runId": "run-1",
+            "name": "Mixed run",
+            "status": "QUEUED",
+            "taskType": "mobile",
+            "profilePackage": None,
+            "cancelRequested": False,
+            "counts": {},
+        }
+    )
+    heterogeneous_target = map_run_target_context(
+        {
+            "runTargetId": "target-1",
+            "deviceId": "device-1",
+            "sequenceId": "wechat.text_chat.v1",
+            "status": "QUEUED",
+            "attemptCount": 0,
+        }
+    )
+    legacy_target = map_run_target_context(
+        {
+            "runTargetId": "target-2",
+            "deviceId": "device-2",
+            "status": "QUEUED",
+            "attemptCount": 0,
+        }
+    )
+
+    assert summary.profile_package is None
+    assert heterogeneous_target.sequence_id == "wechat.text_chat.v1"
+    assert legacy_target.sequence_id is None
 
 
 def test_mcp_submit_execution_proposal_maps_completed_response() -> None:
@@ -868,4 +1057,3 @@ def test_generate_failure_triage_raises_platform_adapter_error_when_tool_fails()
 
     with pytest.raises(PlatformAdapterError, match="Failure triage is not allowed"):
         adapter.generate_failure_triage("rt-1")
-

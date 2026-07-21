@@ -309,11 +309,11 @@ export interface ExperimentRunSummary {
   runId: string;
   name: string;
   description: string | null;
-  poolId: string;
+  poolId: string | null;
   status: RunStatus;
   finalState: RunFinalState | null;
   taskType: string;
-  profilePackage: string;
+  profilePackage: string | null;
   priority: number;
   labels: string[];
   source: string;
@@ -330,6 +330,7 @@ export interface ExperimentRunSummary {
 
 export interface ExperimentRunTarget {
   runTargetId: string;
+  sequenceId: string | null;
   deviceId: string;
   status: RunTargetStatus;
   attemptCount: number;

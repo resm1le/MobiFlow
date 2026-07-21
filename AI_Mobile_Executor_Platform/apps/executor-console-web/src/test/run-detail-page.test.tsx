@@ -16,11 +16,11 @@ vi.mock("../lib/hooks", () => ({
         runId: "run-1",
         name: "Maps batch",
         description: "Batch run",
-        poolId: "pool-1",
+        poolId: null,
         status: "RUNNING",
         finalState: null,
         taskType: "demo.navigate",
-        profilePackage: "com.google.android.apps.maps",
+        profilePackage: null,
         priority: 100,
         labels: ["demo"],
         source: "console-run",
@@ -48,6 +48,7 @@ vi.mock("../lib/hooks", () => ({
       targets: [
         {
           runTargetId: "target-1",
+          sequenceId: null,
           deviceId: "device-1",
           status: "RUNNING",
           attemptCount: 1,
@@ -151,5 +152,6 @@ describe("RunDetailPage", () => {
     expect(view.getByText("task-1")).toBeInTheDocument();
     expect(view.getByText("attempt-1")).toBeInTheDocument();
     expect(view.getByText("Triage")).toBeInTheDocument();
+    expect(view.getAllByText("—")).toHaveLength(2);
   });
 });

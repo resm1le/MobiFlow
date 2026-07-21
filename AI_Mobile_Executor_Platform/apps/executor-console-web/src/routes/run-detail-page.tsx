@@ -79,9 +79,12 @@ export function RunDetailPage() {
                       )
                     : messages.common.notAvailable,
                 },
-                { label: messages.runDetail.fields.poolId, value: run.poolId },
+                { label: messages.runDetail.fields.poolId, value: run.poolId ?? "—" },
                 { label: messages.runDetail.fields.taskType, value: run.taskType },
-                { label: messages.runDetail.fields.profilePackage, value: run.profilePackage },
+                {
+                  label: messages.runDetail.fields.profilePackage,
+                  value: run.profilePackage ?? "—",
+                },
                 { label: messages.runDetail.fields.priority, value: String(run.priority) },
                 { label: messages.runDetail.fields.source, value: run.source },
                 { label: messages.runDetail.fields.createdBy, value: run.createdBy },

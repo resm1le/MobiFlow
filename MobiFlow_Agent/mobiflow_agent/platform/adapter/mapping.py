@@ -140,7 +140,7 @@ def map_run_summary_context(run: dict[str, Any]) -> RunSummaryContext:
         status=run["status"],
         final_state=run.get("finalState"),
         task_type=run["taskType"],
-        profile_package=run["profilePackage"],
+        profile_package=run.get("profilePackage"),
         priority=run.get("priority"),
         labels=list(run.get("labels") or []),
         source=run.get("source"),
@@ -212,6 +212,7 @@ def map_run_target_context(run_target: dict[str, Any]) -> RunTargetContext:
     return RunTargetContext(
         run_target_id=run_target["runTargetId"],
         device_id=run_target["deviceId"],
+        sequence_id=run_target.get("sequenceId"),
         status=run_target["status"],
         attempt_count=run_target["attemptCount"],
         current_task_id=run_target.get("currentTaskId"),

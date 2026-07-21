@@ -68,9 +68,9 @@ export function RunsPage() {
                           )
                         : messages.common.notAvailable}
                     </td>
-                    <td>{run.poolId}</td>
+                    <td>{run.poolId ?? "—"}</td>
                     <td>{run.taskType}</td>
-                    <td className="wrap-cell">{run.profilePackage}</td>
+                    <td className="wrap-cell">{run.profilePackage ?? "mixed"}</td>
                     <td>{run.priority}</td>
                     <td>
                       {formatCounts(

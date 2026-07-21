@@ -174,6 +174,39 @@ class McpPlatformAdapter(PlatformAdapter):
         response = self._call_tool("get_recovery_guidance_context", {"runId": run_id})
         return map_recovery_guidance(require_completed_tool_result("get_recovery_guidance_context", response))
 
+    def record_waypoint_segments(
+        self,
+        *,
+        run_target_id: str,
+        attempt_id: str,
+        waypoint_segments: list[dict[str, Any]],
+        caller_context: CallerContext,
+    ) -> list[dict[str, Any]]:
+        response = self._call_tool(
+            "record_waypoint_segments",
+            {
+                "runTargetId": run_target_id,
+                "attemptId": attempt_id,
+                "waypointSegments": waypoint_segments,
+            },
+            caller_context=caller_context,
+        )
+        result = require_completed_tool_result("record_waypoint_segments", response)
+        if result.get("runTargetId") != run_target_id or result.get("attemptId") != attempt_id:
+            raise PlatformAdapterError(
+                "INVALID_PLATFORM_CONTRACT",
+                "record_waypoint_segments returned mismatched or missing lineage identifiers.",
+                retryable=False,
+            )
+        events = result.get("events")
+        if not isinstance(events, list):
+            raise PlatformAdapterError(
+                "INVALID_PLATFORM_CONTRACT",
+                "record_waypoint_segments returned a non-list events field.",
+                retryable=False,
+            )
+        return events
+
     def submit_execution_proposal(
         self,
         proposal: ExecutionProposal,

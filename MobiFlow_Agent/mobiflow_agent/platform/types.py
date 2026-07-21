@@ -104,7 +104,7 @@ class RunSummaryContext(StrictModel):
     status: str = Field(min_length=1)
     final_state: str | None = None
     task_type: str = Field(min_length=1)
-    profile_package: str = Field(min_length=1)
+    profile_package: str | None = Field(default=None, min_length=1)
     priority: int | None = None
     labels: list[str] = Field(default_factory=list)
     source: str | None = None
@@ -136,6 +136,7 @@ class AttemptContext(StrictModel):
 class RunTargetContext(StrictModel):
     run_target_id: str = Field(min_length=1)
     device_id: str = Field(min_length=1)
+    sequence_id: str | None = Field(default=None, min_length=1)
     status: str = Field(min_length=1)
     attempt_count: int = Field(ge=0)
     current_task_id: str | None = None
