@@ -12,6 +12,9 @@ from mobiflow_agent.collection.models import (
     IntentPlanningResult,
     TaggedDeviceSelector,
 )
+from mobiflow_agent.collection.planner import IntentPlanner
+from mobiflow_agent.collection.prompting import IntentPlannerPromptBuilder
+from mobiflow_agent.collection.protocol import CollectionDispatchPlatform
 
 __all__ = [
     "CollectionDispatchResult",
@@ -25,5 +28,8 @@ __all__ = [
     "IntentPlannerDecision",
     "IntentPlannerDecisionType",
     "IntentPlanningResult",
+    "IntentPlanner",
+    "IntentPlannerPromptBuilder",
+    "CollectionDispatchPlatform",
     "TaggedDeviceSelector",
 ]
