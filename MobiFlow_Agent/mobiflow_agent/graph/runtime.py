@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from mobiflow_agent.agents.executor import ExecutorAgent
 from mobiflow_agent.agents.observer import ObserverAgent
@@ -11,6 +11,7 @@ from mobiflow_agent.agents.verifier import VerifierAgent
 from mobiflow_agent.common.contracts import EntityKind, ExecutionProposal, VerificationSpec
 from mobiflow_agent.control.policy import TaskControlPolicy
 from mobiflow_agent.memory.runtime import TaskMemoryRuntime
+from mobiflow_agent.memory.store import build_memory_timestamp_ms
 from mobiflow_agent.model.config import RoleModelPolicy
 from mobiflow_agent.model.runtime import ModelRegistry
 from mobiflow_agent.runtime.context import ContextCompressionService, ContextHandoff
@@ -40,6 +41,7 @@ class TaskGraphRuntime(TaskGraphSupport):
         role_model_policy: RoleModelPolicy | None = None,
         model_registry: ModelRegistry | None = None,
         context_compressor: ContextCompressionService | None = None,
+        clock: Callable[[], int] = build_memory_timestamp_ms,
         checkpointer: Any | None = None,
     ) -> None:
         super().__init__(
@@ -56,6 +58,7 @@ class TaskGraphRuntime(TaskGraphSupport):
             role_model_policy=role_model_policy,
             model_registry=model_registry,
             context_compressor=context_compressor,
+            clock=clock,
         )
         self._graph_app = build_task_orchestration_graph(self, checkpointer=checkpointer)
 

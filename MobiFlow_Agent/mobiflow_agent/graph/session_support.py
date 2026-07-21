@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from mobiflow_agent.agents.contracts import AgentRole
 from mobiflow_agent.agents.executor import ExecutorAgent
 from mobiflow_agent.agents.observer import ObserverAgent
@@ -12,6 +14,7 @@ from mobiflow_agent.common.ids import build_task_session_id
 from mobiflow_agent.control.dispatcher import TaskAgentDispatcher
 from mobiflow_agent.control.policy import TaskControlPolicy
 from mobiflow_agent.memory.runtime import TaskMemoryRuntime
+from mobiflow_agent.memory.store import build_memory_timestamp_ms
 from mobiflow_agent.model.config import RoleModelPolicy
 from mobiflow_agent.model.runtime import ModelRegistry, ModelRuntime
 from mobiflow_agent.runtime.context import ContextCompressionService, ContextHandoff
@@ -40,6 +43,7 @@ class TaskGraphSessionSupportMixin:
         role_model_policy: RoleModelPolicy | None = None,
         model_registry: ModelRegistry | None = None,
         context_compressor: ContextCompressionService | None = None,
+        clock: Callable[[], int] = build_memory_timestamp_ms,
     ):
         self._role_model_policy = role_model_policy or RoleModelPolicy()
         self._context_compressor = context_compressor or ContextCompressionService()
@@ -70,6 +74,7 @@ class TaskGraphSessionSupportMixin:
             self._memory_runtime.bind_model_runtime(self._model_runtime)
         self._memory_support = memory_support
         self._evaluation_support = evaluation_support
+        self._clock = clock
 
     def create_session(
         self,
@@ -131,6 +136,9 @@ class TaskGraphSessionSupportMixin:
             raise ValueError("TaskGraphRuntime requires a plan before activating a step.")
         session.current_step_index = step_index
         session.current_step = session.plan.steps[step_index]
+        timing = session.waypoint_timings.setdefault(session.current_step.step_id, {})
+        if "entered_at_ms" not in timing:
+            timing["entered_at_ms"] = self._clock()
         session.active_verification_spec = session.current_step.verification_spec or session.initial_verification_spec
         self._refresh_support_context(session, capability="memory")
         self._set_active_model_profile(session, self._role_for_step(session.current_step))
@@ -139,6 +147,7 @@ class TaskGraphSessionSupportMixin:
     def _complete_step(self, session: TaskSession) -> None:
         if session.plan is None or session.current_step is None:
             raise ValueError("TaskGraphRuntime cannot complete a step without an active plan and step.")
+        session.waypoint_timings.setdefault(session.current_step.step_id, {})["arrived_at_ms"] = self._clock()
         self._refresh_session_context(session)
         if self._has_next_step(session):
             session.completion_verdict = TaskCompletionVerdict.STEP_COMPLETED
@@ -151,6 +160,7 @@ class TaskGraphSessionSupportMixin:
     def _complete_step_without_verification(self, session: TaskSession) -> None:
         if session.plan is None or session.current_step is None:
             raise ValueError("TaskGraphRuntime cannot skip a step without an active plan and step.")
+        session.waypoint_timings.setdefault(session.current_step.step_id, {})["arrived_at_ms"] = self._clock()
         if self._has_next_step(session):
             session.completion_verdict = TaskCompletionVerdict.STEP_COMPLETED
             self._activate_step(session, session.current_step_index + 1)

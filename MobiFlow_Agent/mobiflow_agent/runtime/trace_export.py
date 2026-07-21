@@ -65,6 +65,7 @@ class ExecutionTraceExporter:
             ],
             "action_traces": [self._redact(self._dump_model(trace)) for trace in action_traces or []],
         }
+        payload["waypoint_segments"] = self._build_waypoint_segments(session)
         payload["timeline"] = self._build_timeline(payload)
         return self._redact(payload)
 
@@ -156,6 +157,32 @@ class ExecutionTraceExporter:
         if hasattr(value, "model_dump"):
             return value.model_dump(mode="json")
         return value
+
+    @staticmethod
+    def _build_waypoint_segments(session: TaskSession) -> list[dict[str, Any]]:
+        if session.plan is None:
+            return []
+        behavior_label = session.plan.behavior_label
+        segments: list[dict[str, Any]] = []
+        for step in session.plan.steps:
+            timing = session.waypoint_timings.get(step.step_id, {})
+            entered_at_ms = timing.get("entered_at_ms")
+            arrived_at_ms = timing.get("arrived_at_ms")
+            dwell_ms = (
+                arrived_at_ms - entered_at_ms
+                if entered_at_ms is not None and arrived_at_ms is not None
+                else None
+            )
+            segments.append(
+                {
+                    "step_id": step.step_id,
+                    "behavior_label": behavior_label,
+                    "entered_at_ms": entered_at_ms,
+                    "arrived_at_ms": arrived_at_ms,
+                    "dwell_ms": dwell_ms,
+                }
+            )
+        return segments
 
     @staticmethod
     def _build_timeline(trace: dict[str, Any]) -> list[dict[str, Any]]:

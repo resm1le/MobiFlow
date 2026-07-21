@@ -52,6 +52,7 @@ class TaskSession(StrictModel):
     memory_context: dict[str, dict[str, Any]] = Field(default_factory=dict)
     evaluation_context: dict[str, dict[str, Any]] = Field(default_factory=dict)
     step_summaries: dict[str, StepContextSummary] = Field(default_factory=dict)
+    waypoint_timings: dict[str, dict[str, int]] = Field(default_factory=dict)
     session_digest: SessionContextDigest | None = None
     imported_handoff: ContextHandoff | None = None
     model_trace: list[ModelInvocationTrace] = Field(default_factory=list)
