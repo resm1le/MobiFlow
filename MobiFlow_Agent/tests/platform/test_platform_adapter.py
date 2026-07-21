@@ -75,6 +75,169 @@ def _caller_context() -> CallerContext:
     )
 
 
+def _dispatch_device_payload() -> dict[str, Any]:
+    return {
+        "deviceId": "device-1",
+        "installedProfiles": ["com.tencent.mm"],
+        "tags": ["android13", "lab-a"],
+        "hostGroup": "host-a",
+        "registered": True,
+        "online": True,
+        "busy": False,
+        "status": "IDLE",
+        "updatedAt": 1721550000000,
+    }
+
+
+def _run_planning_catalog_payload() -> dict[str, Any]:
+    return {
+        "availableDevicePools": [
+            {
+                "poolId": "pool-a",
+                "name": "Android 13",
+                "hostGroup": "host-a",
+                "deviceCount": 4,
+                "requiredTags": ["android13"],
+                "excludedTags": ["unstable"],
+            }
+        ],
+        "availableProfiles": [
+            {
+                "profilePackage": "com.tencent.mm",
+                "installedDeviceCount": 4,
+                "supportedTaskTypes": ["PLUGIN_RUN"],
+                "requiredTaskPayloadFields": ["waypoint_sequence"],
+                "recommendedDefaults": {"locale": "zh-CN"},
+                "knownLimitations": ["requires login"],
+            }
+        ],
+        "defaultRunPolicy": {
+            "priority": 100,
+            "maxRetriesPerDevice": 1,
+            "queueTimeoutMs": 300000,
+            "defaultRunConfig": {
+                "loopCount": 1,
+                "budgetMs": 300000,
+                "loopIntervalMs": 0,
+                "networkIsolationEnabled": False,
+                "pollIntervalMs": 15000,
+                "heartbeatIntervalMs": 30000,
+            },
+            "defaultArtifactPolicy": {
+                "uploadLog": True,
+                "uploadScreenshot": True,
+                "uploadDump": True,
+            },
+        },
+        "allowedTaskTypes": ["PLUGIN_RUN", "PLUGIN_SMOKE"],
+    }
+
+
+@pytest.mark.parametrize("adapter_kind", ["http", "mcp"])
+def test_dispatch_discovery_maps_devices_and_planning_catalog(adapter_kind: str) -> None:
+    device = _dispatch_device_payload()
+    catalog = _run_planning_catalog_payload()
+    if adapter_kind == "http":
+        adapter = HttpPlatformAdapter(
+            transport=StubTransport(
+                {
+                    ("POST", "/tools/execute"): [
+                        {"status": "completed", "result": [device]},
+                        {"status": "completed", "result": catalog},
+                    ]
+                }
+            )
+        )
+    else:
+        adapter = McpPlatformAdapter(
+            transport=StubMcpTransport(
+                {
+                    "tools/call": [
+                        {"structuredContent": {"status": "completed", "result": [device]}},
+                        {"structuredContent": {"status": "completed", "result": catalog}},
+                    ]
+                }
+            )
+        )
+
+    devices = adapter.list_devices()
+    planning = adapter.get_run_planning_catalog()
+
+    assert devices[0].device_id == "device-1"
+    assert devices[0].installed_profiles == ["com.tencent.mm"]
+    assert planning.default_run_policy.default_run_config.budget_ms == 300000
+    assert planning.default_run_policy.default_artifact_policy.upload_dump is True
+    assert planning.available_profiles[0].profile_package == "com.tencent.mm"
+    assert planning.allowed_task_types == ["PLUGIN_RUN", "PLUGIN_SMOKE"]
+
+    device["tags"].append("mutated")
+    catalog["allowedTaskTypes"].append("mutated")
+    assert devices[0].tags == ["android13", "lab-a"]
+    assert planning.allowed_task_types == ["PLUGIN_RUN", "PLUGIN_SMOKE"]
+
+
+@pytest.mark.parametrize("adapter_kind", ["http", "mcp"])
+def test_dispatch_list_devices_preserves_empty_result(adapter_kind: str) -> None:
+    response = {"status": "completed", "result": []}
+    if adapter_kind == "http":
+        adapter = HttpPlatformAdapter(
+            transport=StubTransport({("POST", "/tools/execute"): [response]})
+        )
+    else:
+        adapter = McpPlatformAdapter(
+            transport=StubMcpTransport(
+                {"tools/call": [{"structuredContent": response}]}
+            )
+        )
+
+    assert adapter.list_devices() == []
+
+
+@pytest.mark.parametrize(
+    ("result", "expected_code"),
+    [
+        ({}, "INVALID_PLATFORM_CONTRACT"),
+        ([{"deviceId": "device-1"}], "INVALID_PLATFORM_CONTRACT"),
+    ],
+)
+def test_http_list_devices_rejects_invalid_contract(
+    result: Any,
+    expected_code: str,
+) -> None:
+    adapter = HttpPlatformAdapter(
+        transport=StubTransport(
+            {("POST", "/tools/execute"): [{"status": "completed", "result": result}]}
+        )
+    )
+
+    with pytest.raises(PlatformAdapterError) as exc_info:
+        adapter.list_devices()
+
+    assert exc_info.value.code == expected_code
+
+
+@pytest.mark.parametrize("adapter_kind", ["http", "mcp"])
+def test_dispatch_discovery_propagates_platform_failure(adapter_kind: str) -> None:
+    response = {
+        "status": "failed",
+        "error": {"code": "INVENTORY_UNAVAILABLE", "message": "try later", "retryable": True},
+    }
+    if adapter_kind == "http":
+        adapter = HttpPlatformAdapter(
+            transport=StubTransport({("POST", "/tools/execute"): [response]})
+        )
+    else:
+        adapter = McpPlatformAdapter(
+            transport=StubMcpTransport({"tools/call": [{"structuredContent": response}]})
+        )
+
+    with pytest.raises(PlatformAdapterError) as exc_info:
+        adapter.list_devices()
+
+    assert exc_info.value.code == "INVENTORY_UNAVAILABLE"
+    assert exc_info.value.retryable is True
+
+
 def _exported_waypoint_segments() -> list[dict[str, Any]]:
     step = TaskStep(
         step_id="logged_in",

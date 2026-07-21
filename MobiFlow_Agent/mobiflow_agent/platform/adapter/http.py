@@ -11,14 +11,17 @@ from mobiflow_agent.platform.adapter.mapping import (
     map_audit_entry,
     map_catalog_item,
     map_entity_refs,
+    map_dispatch_device_context,
     map_failure_triage_record,
     map_governed_action_result,
     map_recovery_guidance,
+    map_run_planning_catalog_context,
     map_run_governance_snapshot,
     map_run_lineage_snapshot,
     map_run_target_context,
     map_attempt_context,
     require_completed_tool_result,
+    require_completed_tool_payload,
 )
 from mobiflow_agent.platform.adapter.protocol import PlatformAdapter, PlatformAdapterError
 from mobiflow_agent.platform.adapter.transport import PROTOCOL_VERSION, ToolRuntimeTransport, UrlLibToolRuntimeTransport
@@ -26,11 +29,13 @@ from mobiflow_agent.platform.evidence import build_attempt_observation_view, bui
 from mobiflow_agent.platform.types import (
     AuditTimelineEntry,
     AttemptContext,
+    DispatchDeviceContext,
     FailureTriageRecord,
     GovernedActionResult,
     RecoveryGuidance,
     RunGovernanceSnapshot,
     RunLineageSnapshot,
+    RunPlanningCatalogContext,
     RunTargetContext,
     ToolCatalogItem,
 )
@@ -55,6 +60,39 @@ class HttpPlatformAdapter(PlatformAdapter):
     def get_tool_catalog(self) -> list[ToolCatalogItem]:
         response = self._transport.request_json("GET", "/tools/catalog")
         return [map_catalog_item(item) for item in response.get("tools", [])]
+
+    def list_devices(self) -> list[DispatchDeviceContext]:
+        response = self._execute_tool("list_devices", {})
+        payload = require_completed_tool_payload("list_devices", response)
+        if not isinstance(payload, list):
+            raise PlatformAdapterError(
+                "INVALID_PLATFORM_CONTRACT",
+                "list_devices returned a non-list result.",
+                retryable=False,
+            )
+        try:
+            return [map_dispatch_device_context(device) for device in payload]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PlatformAdapterError(
+                "INVALID_PLATFORM_CONTRACT",
+                "list_devices returned an invalid device entry.",
+                retryable=False,
+            ) from exc
+
+    def get_run_planning_catalog(self) -> RunPlanningCatalogContext:
+        response = self._execute_tool("get_run_planning_catalog", {})
+        try:
+            return map_run_planning_catalog_context(
+                require_completed_tool_result("get_run_planning_catalog", response)
+            )
+        except PlatformAdapterError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PlatformAdapterError(
+                "INVALID_PLATFORM_CONTRACT",
+                "get_run_planning_catalog returned an invalid result.",
+                retryable=False,
+            ) from exc
 
     def observe_run(self, run_id: str) -> ObservationView:
         governance = self._execute_tool("get_run_governance_snapshot", {"runId": run_id})

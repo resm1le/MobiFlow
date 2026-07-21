@@ -5,14 +5,19 @@ from typing import Any
 from mobiflow_agent.platform.adapter.protocol import PlatformAdapterError
 from mobiflow_agent.platform.types import (
     AuditTimelineEntry,
+    AvailableDevicePoolContext,
+    AvailableProfileContext,
     AttemptArtifactResource,
     AttemptContext,
     FailureCategory,
     FailureTriageRecord,
     FailureTriageValidation,
+    DispatchDeviceContext,
     GovernedActionResult,
     GovernedActionState,
     PlatformEntityRefs,
+    PlatformArtifactPolicy,
+    PlatformRunConfig,
     RecoveryGuidance,
     RetryRecommendation,
     RunAttemptCounts,
@@ -20,6 +25,8 @@ from mobiflow_agent.platform.types import (
     RunDetailContext,
     RunGovernanceSnapshot,
     RunLineageSnapshot,
+    RunPlanningCatalogContext,
+    RunPlanningDefaultPolicy,
     RunSummaryContext,
     RunTargetContext,
     SuggestedNextAction,
@@ -31,15 +38,90 @@ from mobiflow_agent.platform.types import (
 from mobiflow_agent.runtime.state import CallerContext
 
 
-def require_completed_tool_result(tool: str, response: dict[str, Any]) -> dict[str, Any]:
+def require_completed_tool_payload(tool: str, response: dict[str, Any]) -> Any:
     status = response.get("status")
     if status == "completed":
-        return response.get("result") or {}
+        result = response.get("result")
+        return {} if result is None else result
     error_payload = response.get("error") or {}
     code = error_payload.get("code", f"{tool.upper()}_FAILED")
     message = error_payload.get("message", f"{tool} did not complete successfully.")
     retryable = bool(error_payload.get("retryable", False))
     raise PlatformAdapterError(code, message, retryable=retryable)
+
+
+def require_completed_tool_result(tool: str, response: dict[str, Any]) -> dict[str, Any]:
+    result = require_completed_tool_payload(tool, response)
+    if not isinstance(result, dict):
+        raise PlatformAdapterError(
+            "INVALID_PLATFORM_CONTRACT",
+            f"{tool} returned a non-object result.",
+            retryable=False,
+        )
+    return result
+
+
+def map_dispatch_device_context(device: dict[str, Any]) -> DispatchDeviceContext:
+    return DispatchDeviceContext(
+        device_id=device["deviceId"],
+        installed_profiles=list(device["installedProfiles"]),
+        tags=list(device["tags"]),
+        host_group=device.get("hostGroup"),
+        registered=device["registered"],
+        online=device["online"],
+        busy=device["busy"],
+        status=device["status"],
+        updated_at=device["updatedAt"],
+    )
+
+
+def map_run_planning_catalog_context(catalog: dict[str, Any]) -> RunPlanningCatalogContext:
+    policy = catalog["defaultRunPolicy"]
+    run_config = policy["defaultRunConfig"]
+    artifact_policy = policy["defaultArtifactPolicy"]
+    return RunPlanningCatalogContext(
+        available_device_pools=[
+            AvailableDevicePoolContext(
+                pool_id=pool["poolId"],
+                name=pool["name"],
+                host_group=pool.get("hostGroup"),
+                device_count=pool["deviceCount"],
+                required_tags=list(pool.get("requiredTags") or []),
+                excluded_tags=list(pool.get("excludedTags") or []),
+            )
+            for pool in catalog["availableDevicePools"]
+        ],
+        available_profiles=[
+            AvailableProfileContext(
+                profile_package=profile["profilePackage"],
+                installed_device_count=profile["installedDeviceCount"],
+                supported_task_types=list(profile.get("supportedTaskTypes") or []),
+                required_task_payload_fields=list(profile.get("requiredTaskPayloadFields") or []),
+                recommended_defaults=dict(profile.get("recommendedDefaults") or {}),
+                known_limitations=list(profile.get("knownLimitations") or []),
+            )
+            for profile in catalog["availableProfiles"]
+        ],
+        default_run_policy=RunPlanningDefaultPolicy(
+            priority=policy["priority"],
+            max_retries_per_device=policy["maxRetriesPerDevice"],
+            queue_timeout_ms=policy["queueTimeoutMs"],
+            default_run_config=PlatformRunConfig(
+                loop_count=run_config["loopCount"],
+                budget_ms=run_config["budgetMs"],
+                loop_interval_ms=run_config["loopIntervalMs"],
+                network_isolation_enabled=run_config["networkIsolationEnabled"],
+                poll_interval_ms=run_config["pollIntervalMs"],
+                heartbeat_interval_ms=run_config["heartbeatIntervalMs"],
+            ),
+            default_artifact_policy=PlatformArtifactPolicy(
+                upload_log=artifact_policy["uploadLog"],
+                upload_screenshot=artifact_policy["uploadScreenshot"],
+                upload_dump=artifact_policy["uploadDump"],
+            ),
+        ),
+        allowed_task_types=list(catalog["allowedTaskTypes"]),
+    )
 
 
 def caller_context_payload(caller_context: CallerContext) -> dict[str, str]:
@@ -318,10 +400,12 @@ __all__ = [
     "map_attempt_context",
     "map_audit_entry",
     "map_catalog_item",
+    "map_dispatch_device_context",
     "map_entity_refs",
     "map_failure_triage_record",
     "map_governed_action_result",
     "map_recovery_guidance",
+    "map_run_planning_catalog_context",
     "map_run_attempt_counts",
     "map_run_counts",
     "map_run_detail_context",
@@ -332,4 +416,5 @@ __all__ = [
     "map_tool_audit",
     "map_tool_error",
     "require_completed_tool_result",
+    "require_completed_tool_payload",
 ]

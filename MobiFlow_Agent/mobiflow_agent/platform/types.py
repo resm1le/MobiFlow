@@ -79,6 +79,66 @@ class ToolCatalogItem(StrictModel):
     semantic_tags: list[str] = Field(default_factory=list)
 
 
+class DispatchDeviceContext(StrictModel):
+    device_id: str = Field(min_length=1)
+    installed_profiles: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    host_group: str | None = None
+    registered: bool
+    online: bool
+    busy: bool
+    status: str = Field(min_length=1)
+    updated_at: int = Field(ge=0)
+
+
+class AvailableDevicePoolContext(StrictModel):
+    pool_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    host_group: str | None = None
+    device_count: int = Field(ge=0)
+    required_tags: list[str] = Field(default_factory=list)
+    excluded_tags: list[str] = Field(default_factory=list)
+
+
+class AvailableProfileContext(StrictModel):
+    profile_package: str = Field(min_length=1)
+    installed_device_count: int = Field(ge=0)
+    supported_task_types: list[str] = Field(default_factory=list)
+    required_task_payload_fields: list[str] = Field(default_factory=list)
+    recommended_defaults: dict[str, Any] = Field(default_factory=dict)
+    known_limitations: list[str] = Field(default_factory=list)
+
+
+class PlatformRunConfig(StrictModel):
+    loop_count: int = Field(ge=0)
+    budget_ms: int = Field(ge=0)
+    loop_interval_ms: int = Field(ge=0)
+    network_isolation_enabled: bool
+    poll_interval_ms: int = Field(ge=0)
+    heartbeat_interval_ms: int = Field(ge=0)
+
+
+class PlatformArtifactPolicy(StrictModel):
+    upload_log: bool
+    upload_screenshot: bool
+    upload_dump: bool
+
+
+class RunPlanningDefaultPolicy(StrictModel):
+    priority: int
+    max_retries_per_device: int = Field(ge=0)
+    queue_timeout_ms: int = Field(ge=0)
+    default_run_config: PlatformRunConfig
+    default_artifact_policy: PlatformArtifactPolicy
+
+
+class RunPlanningCatalogContext(StrictModel):
+    available_device_pools: list[AvailableDevicePoolContext] = Field(default_factory=list)
+    available_profiles: list[AvailableProfileContext] = Field(default_factory=list)
+    default_run_policy: RunPlanningDefaultPolicy
+    allowed_task_types: list[str] = Field(default_factory=list)
+
+
 class RunCounts(StrictModel):
     total_targets: int = Field(ge=0)
     queued: int = Field(ge=0)
