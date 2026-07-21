@@ -1,4 +1,5 @@
 from mobiflow_agent.common.contracts import (
+    DEFAULT_MOBILE_ACTIONS,
     EntityKind,
     VerificationCheck,
     VerificationSpec,
@@ -63,6 +64,29 @@ def test_compiled_steps_are_dynamic_with_policy_and_arrival_spec():
     assert first.goal == "Reach logged-in state."
     assert first.verification_spec is not None
     assert first.verification_spec.verification_id == "verification:logged_in"
+
+
+def test_compiled_step_allowed_side_effects_from_waypoint_default():
+    plan = compile_sequence_to_plan(_sequence())
+    assert plan.steps[0].allowed_side_effects == DEFAULT_MOBILE_ACTIONS
+
+
+def test_compiled_step_allowed_side_effects_narrowed():
+    sequence = WaypointSequence(
+        sequence_id="narrow.v1",
+        behavior_label="narrow",
+        profile_package="pkg",
+        waypoints=[
+            Waypoint(
+                waypoint_id="only_tap",
+                description="Only tap.",
+                arrival_spec=_arrival_spec("only_tap"),
+                allowed_actions=["mobile.tap"],
+            )
+        ],
+    )
+    plan = compile_sequence_to_plan(sequence)
+    assert plan.steps[0].allowed_side_effects == ["mobile.tap"]
 
 
 def test_compiled_plan_summary_mentions_behavior_label():

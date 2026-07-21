@@ -17,7 +17,7 @@ def _compile_step(waypoint: Waypoint) -> TaskStep:
         step_id=waypoint.waypoint_id,
         kind=TaskStepKind.DYNAMIC,
         goal=waypoint.description,
-        allowed_side_effects=[],
+        allowed_side_effects=list(waypoint.allowed_actions),
         verification_spec=waypoint.arrival_spec,
         path_constraint=waypoint.path_constraint,
         policy=TaskStepPolicy(

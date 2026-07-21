@@ -4,10 +4,7 @@ from typing import Iterable
 
 from pydantic import Field
 
-from mobiflow_agent.common.contracts import ApprovalMode, EntityKind, StrictModel
-
-
-DEFAULT_MOBILE_ACTIONS = ["mobile.launch", "mobile.tap", "mobile.input_text", "mobile.wait", "mobile.back"]
+from mobiflow_agent.common.contracts import ApprovalMode, DEFAULT_MOBILE_ACTIONS, EntityKind, StrictModel
 
 
 class ScenarioTemplate(StrictModel):

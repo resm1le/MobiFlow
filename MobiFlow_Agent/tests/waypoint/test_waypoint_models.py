@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from mobiflow_agent.common.contracts import (
+    DEFAULT_MOBILE_ACTIONS,
     EntityKind,
     VerificationCheck,
     VerificationSpec,
@@ -43,6 +44,21 @@ def test_waypoint_defaults_to_commonsense_and_no_constraint():
     assert wp.strength == WaypointStrength.COMMONSENSE
     assert wp.path_constraint is None
     assert wp.rendezvous is None
+
+
+def test_waypoint_allowed_actions_defaults_to_full_mobile_set():
+    wp = _waypoint("logged_in")
+    assert wp.allowed_actions == DEFAULT_MOBILE_ACTIONS
+
+
+def test_waypoint_allowed_actions_can_be_narrowed():
+    wp = Waypoint(
+        waypoint_id="tap_only",
+        description="Only tapping allowed.",
+        arrival_spec=_arrival_spec("tap_only"),
+        allowed_actions=["mobile.tap"],
+    )
+    assert wp.allowed_actions == ["mobile.tap"]
 
 
 def test_strict_waypoint_carries_path_constraint():

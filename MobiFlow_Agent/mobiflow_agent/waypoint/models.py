@@ -6,7 +6,12 @@ from enum import Enum
 
 from pydantic import Field, model_validator
 
-from mobiflow_agent.common.contracts import PathConstraint, StrictModel, VerificationSpec
+from mobiflow_agent.common.contracts import (
+    DEFAULT_MOBILE_ACTIONS,
+    PathConstraint,
+    StrictModel,
+    VerificationSpec,
+)
 
 
 class WaypointStrength(str, Enum):
@@ -28,6 +33,7 @@ class Waypoint(StrictModel):
     strength: WaypointStrength = WaypointStrength.COMMONSENSE
     path_constraint: PathConstraint | None = None
     rendezvous: RendezvousSpec | None = None
+    allowed_actions: list[str] = Field(default_factory=lambda: list(DEFAULT_MOBILE_ACTIONS))
 
 
 class WaypointSequence(StrictModel):

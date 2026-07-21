@@ -6,6 +6,15 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+DEFAULT_MOBILE_ACTIONS = [
+    "mobile.launch",
+    "mobile.tap",
+    "mobile.input_text",
+    "mobile.wait",
+    "mobile.back",
+]
+
+
 class StrictModel(BaseModel):
     """Common base model for canonical contracts."""
 
@@ -247,6 +256,7 @@ class VerificationVerdict(StrictModel):
 
 __all__ = [
     "ApprovalMode",
+    "DEFAULT_MOBILE_ACTIONS",
     "EntityKind",
     "EvidenceKind",
     "EvidenceRef",

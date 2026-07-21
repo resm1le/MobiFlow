@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from mobiflow_agent.agents.contracts import AgentRole, RoleRequest, RoleResult
 from mobiflow_agent.common.contracts import (
     ApprovalMode,
+    DEFAULT_MOBILE_ACTIONS,
     EntityKind,
     ExecutionProposal,
     StrictModel,
@@ -33,7 +34,7 @@ class PlannerModelOutput(StrictModel):
 
 
 class PlannerAgent:
-    DEFAULT_DYNAMIC_SIDE_EFFECTS = ["mobile.launch", "mobile.tap", "mobile.input_text", "mobile.wait", "mobile.back"]
+    DEFAULT_DYNAMIC_SIDE_EFFECTS = DEFAULT_MOBILE_ACTIONS
 
     def __init__(
         self,
