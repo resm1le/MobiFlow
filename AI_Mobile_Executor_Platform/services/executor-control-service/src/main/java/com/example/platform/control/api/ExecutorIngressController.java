@@ -11,6 +11,8 @@ import com.example.platform.control.api.ExecutorApiModels.EventsRequest;
 import com.example.platform.control.api.ExecutorApiModels.FinishRequest;
 import com.example.platform.control.api.ExecutorApiModels.HeartbeatResponse;
 import com.example.platform.control.api.ExecutorApiModels.StartRequest;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsRequest;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsResponse;
 import com.example.platform.control.application.ArtifactUploadService;
 import com.example.platform.control.application.ControlApiExceptions;
 import com.example.platform.control.application.ControlErrorCode;
@@ -61,6 +63,15 @@ public class ExecutorIngressController {
     @PostMapping("/executor/tasks/{attemptId}/finish")
     public void finish(@PathVariable String attemptId, HttpServletRequest servletRequest, @Valid @RequestBody FinishRequest request) {
         controlPlaneService.finish(ExecutorAuthContext.required(servletRequest), attemptId, request);
+    }
+
+    @PostMapping("/executor/tasks/{attemptId}/waypoint-segments")
+    public ExecutorWaypointSegmentsResponse recordWaypointSegments(
+            @PathVariable String attemptId,
+            HttpServletRequest servletRequest,
+            @Valid @RequestBody ExecutorWaypointSegmentsRequest request) {
+        return controlPlaneService.recordWaypointSegments(
+                ExecutorAuthContext.required(servletRequest), attemptId, request);
     }
 
     @PostMapping("/executor/tasks/{attemptId}/artifacts")

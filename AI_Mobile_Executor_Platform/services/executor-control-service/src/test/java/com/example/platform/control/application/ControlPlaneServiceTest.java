@@ -7,6 +7,9 @@ import com.example.platform.control.api.ExecutorApiModels.ClaimTaskResponse;
 import com.example.platform.control.api.ExecutorApiModels.EventsRequest;
 import com.example.platform.control.api.ExecutorApiModels.HeartbeatResponse;
 import com.example.platform.control.api.ExecutorApiModels.RunEvent;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegment;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsRequest;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsResponse;
 import com.example.platform.control.domain.DomainValues;
 import com.example.platform.control.domain.PersistenceModels.DeviceEntity;
 import com.example.platform.control.domain.PersistenceModels.DeviceRuntimeStateEntity;
@@ -54,6 +57,7 @@ class ControlPlaneServiceTest {
     private ControlStateRules controlStateRules;
     private AttemptAccessValidator attemptAccessValidator;
     private ExperimentRunService experimentRunService;
+    private WaypointTimelineService waypointTimelineService;
     private ControlPlaneService controlPlaneService;
 
     @BeforeEach
@@ -71,6 +75,7 @@ class ControlPlaneServiceTest {
         controlStateRules = new ControlStateRules();
         attemptAccessValidator = new AttemptAccessValidator(attemptMapper);
         experimentRunService = Mockito.mock(ExperimentRunService.class);
+        waypointTimelineService = Mockito.mock(WaypointTimelineService.class);
 
         JsonCodec jsonCodec = new JsonCodec(new ObjectMapper());
         controlPlaneService = new ControlPlaneService(
@@ -85,7 +90,8 @@ class ControlPlaneServiceTest {
                 controlProperties,
                 controlStateRules,
                 attemptAccessValidator,
-                experimentRunService
+                experimentRunService,
+                waypointTimelineService
         );
     }
 
@@ -403,6 +409,55 @@ class ControlPlaneServiceTest {
 
         assertEquals(ControlErrorCode.EXECUTOR_IDENTITY_MISMATCH, exception.getReason());
         verify(runEventMapper, never()).insertBatch(any());
+    }
+
+    @Test
+    void recordWaypointSegmentsUsesAuthenticatedDeviceAndCanonicalLineage() {
+        TaskAttemptEntity attempt = new TaskAttemptEntity();
+        attempt.setAttemptId("attempt-1");
+        attempt.setTaskId("task-1");
+        attempt.setDeviceId("device-1");
+        when(attemptMapper.findById("attempt-1")).thenReturn(attempt);
+        when(waypointTimelineService.recordForAttempt(eq("attempt-1"), eq("device-1"), isNull(), any()))
+                .thenReturn(new WaypointTimelineService.WaypointTimelineRecord(
+                        "target-1", "attempt-1", List.of(new com.example.platform.control.domain.PersistenceModels.RunEventEntity())
+                ));
+
+        ExecutorWaypointSegmentsResponse response = controlPlaneService.recordWaypointSegments(
+                authContext(),
+                "attempt-1",
+                new ExecutorWaypointSegmentsRequest(List.of(new ExecutorWaypointSegment(
+                        "logged_in", "wechat_text_chat", 1000L, 1500L, 500L
+                )))
+        );
+
+        assertEquals("target-1", response.runTargetId());
+        assertEquals("attempt-1", response.attemptId());
+        assertEquals(1, response.recordedCount());
+        verify(waypointTimelineService).recordForAttempt(eq("attempt-1"), eq("device-1"), isNull(), any());
+    }
+
+    @Test
+    void recordWaypointSegmentsRejectsAttemptOwnedByAnotherDevice() {
+        TaskAttemptEntity attempt = new TaskAttemptEntity();
+        attempt.setAttemptId("attempt-1");
+        attempt.setTaskId("task-1");
+        attempt.setDeviceId("device-2");
+        when(attemptMapper.findById("attempt-1")).thenReturn(attempt);
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> controlPlaneService.recordWaypointSegments(
+                        authContext(),
+                        "attempt-1",
+                        new ExecutorWaypointSegmentsRequest(List.of(new ExecutorWaypointSegment(
+                                "logged_in", "wechat_text_chat", null, null, null
+                        )))
+                )
+        );
+
+        assertEquals(ControlErrorCode.ATTEMPT_OWNERSHIP_INVALID, exception.getReason());
+        verify(waypointTimelineService, never()).recordForAttempt(any(), any(), any(), any());
     }
 
     private ExecutorAuthContext authContext() {

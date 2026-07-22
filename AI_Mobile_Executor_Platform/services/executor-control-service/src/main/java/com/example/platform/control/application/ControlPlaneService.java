@@ -12,6 +12,8 @@ import com.example.platform.control.api.ExecutorApiModels.FinishRequest;
 import com.example.platform.control.api.ExecutorApiModels.HeartbeatResponse;
 import com.example.platform.control.api.ExecutorApiModels.RunConfig;
 import com.example.platform.control.api.ExecutorApiModels.StartRequest;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsRequest;
+import com.example.platform.control.api.ExecutorApiModels.ExecutorWaypointSegmentsResponse;
 import com.example.platform.control.domain.DomainValues;
 import com.example.platform.control.domain.PersistenceModels.DeviceCommandEntity;
 import com.example.platform.control.domain.PersistenceModels.DeviceEntity;
@@ -55,6 +57,7 @@ public class ControlPlaneService {
     private final ControlStateRules controlStateRules;
     private final AttemptAccessValidator attemptAccessValidator;
     private final ExperimentRunService experimentRunService;
+    private final WaypointTimelineService waypointTimelineService;
     private final Clock clock = Clock.systemUTC();
 
     public ControlPlaneService(DeviceMapper deviceMapper,
@@ -68,7 +71,8 @@ public class ControlPlaneService {
                                ControlProperties controlProperties,
                                ControlStateRules controlStateRules,
                                AttemptAccessValidator attemptAccessValidator,
-                               ExperimentRunService experimentRunService) {
+                               ExperimentRunService experimentRunService,
+                               WaypointTimelineService waypointTimelineService) {
         this.deviceMapper = deviceMapper;
         this.runtimeStateMapper = runtimeStateMapper;
         this.taskMapper = taskMapper;
@@ -81,6 +85,7 @@ public class ControlPlaneService {
         this.controlStateRules = controlStateRules;
         this.attemptAccessValidator = attemptAccessValidator;
         this.experimentRunService = experimentRunService;
+        this.waypointTimelineService = waypointTimelineService;
     }
 
     @Transactional
@@ -262,6 +267,35 @@ public class ControlPlaneService {
         if (!events.isEmpty()) {
             runEventMapper.insertBatch(events);
         }
+    }
+
+    @Transactional
+    public ExecutorWaypointSegmentsResponse recordWaypointSegments(
+            ExecutorAuthContext authContext,
+            String attemptId,
+            ExecutorWaypointSegmentsRequest request) {
+        attemptAccessValidator.requireOwnedAttempt(authContext, attemptId);
+        WaypointTimelineService.WaypointTimelineRecord record = waypointTimelineService.recordForAttempt(
+                attemptId,
+                authContext.deviceId(),
+                null,
+                request.waypointSegments().stream()
+                        .map(segment -> new WaypointTimelineService.WaypointSegmentInput(
+                                segment.stepId(),
+                                segment.behaviorLabel(),
+                                segment.enteredAtMs(),
+                                segment.arrivedAtMs(),
+                                segment.dwellMs(),
+                                null,
+                                null
+                        ))
+                        .toList()
+        );
+        return new ExecutorWaypointSegmentsResponse(
+                record.runTargetId(),
+                record.attemptId(),
+                record.events().size()
+        );
     }
 
     @Transactional
