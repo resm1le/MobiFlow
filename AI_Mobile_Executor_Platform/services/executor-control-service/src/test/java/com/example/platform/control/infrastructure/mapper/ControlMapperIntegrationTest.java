@@ -12,6 +12,7 @@ import com.example.platform.control.domain.PersistenceModels.ExperimentRunTarget
 import com.example.platform.control.domain.PersistenceModels.RunEventEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskAttemptEntity;
 import com.example.platform.control.domain.PersistenceModels.TaskEntity;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -90,6 +91,9 @@ class ControlMapperIntegrationTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private Flyway flyway;
 
     private final JsonCodec jsonCodec = new JsonCodec(new com.fasterxml.jackson.databind.ObjectMapper());
 
@@ -220,6 +224,35 @@ class ControlMapperIntegrationTest {
 
         assertEquals(List.of("task-1"), firstSelection.get(5, TimeUnit.SECONDS));
         assertFalse(secondSelection.contains("task-1"));
+    }
+
+    @Test
+    void concurrentPinnedClaimsSelectDifferentDeviceTasks() throws Exception {
+        TaskEntity deviceOneTask = task("task-device-1", 100, 100L, DomainValues.TASK_STATUS_QUEUED);
+        deviceOneTask.setTargetDeviceId("device-1");
+        TaskEntity deviceTwoTask = task("task-device-2", 100, 100L, DomainValues.TASK_STATUS_QUEUED);
+        deviceTwoTask.setTargetDeviceId("device-2");
+        insertTask(deviceOneTask);
+        insertTask(deviceTwoTask);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        Future<String> deviceOneClaim = executorService.submit(() -> {
+            ready.countDown();
+            awaitLatch(start);
+            return inNewTransaction(() -> taskMapper.findClaimableQueuedTasks("device-1", 1).get(0).getTaskId());
+        });
+        Future<String> deviceTwoClaim = executorService.submit(() -> {
+            ready.countDown();
+            awaitLatch(start);
+            return inNewTransaction(() -> taskMapper.findClaimableQueuedTasks("device-2", 1).get(0).getTaskId());
+        });
+
+        assertTrue(ready.await(5, TimeUnit.SECONDS));
+        start.countDown();
+
+        assertEquals("task-device-1", deviceOneClaim.get(5, TimeUnit.SECONDS));
+        assertEquals("task-device-2", deviceTwoClaim.get(5, TimeUnit.SECONDS));
     }
 
     @Test
@@ -455,6 +488,7 @@ class ControlMapperIntegrationTest {
         original.setActionIndex(null);
         original.setPayloadJson("{\"sequence_id\":\"sequence-1\",\"step_id\":\"logged_in\",\"deviceId\":\"device-waypoint\"}");
         runEventMapper.insertBatchNoMutation(List.of(original));
+        runEventMapper.insertBatchNoMutation(List.of(original));
 
         RunEventEntity conflicting = event(
                 "attempt-waypoint",
@@ -489,6 +523,41 @@ class ControlMapperIntegrationTest {
                 ),
                 jsonCodec.readMap(event.getPayloadJson())
         );
+
+        RunEventEntity retryAttemptEvent = event(
+                "attempt-waypoint-retry",
+                "task-waypoint-retry",
+                "device-waypoint",
+                "run-waypoint",
+                "WAYPOINT_SEGMENT",
+                "waypoint_segment:0:COMPLETE",
+                2_500L
+        );
+        retryAttemptEvent.setEventKey("waypoint:0");
+        retryAttemptEvent.setState("COMPLETE");
+        retryAttemptEvent.setStepIndex(0);
+        retryAttemptEvent.setActionIndex(null);
+        retryAttemptEvent.setPayloadJson(original.getPayloadJson());
+        runEventMapper.insertBatchNoMutation(List.of(retryAttemptEvent));
+
+        assertEquals(1, runEventMapper.findByAttemptId("attempt-waypoint").size());
+        assertEquals(1, runEventMapper.findByAttemptId("attempt-waypoint-retry").size());
+    }
+
+    @Test
+    void flywayAppliesWaypointLineageMigrations() {
+        assertEquals("11", flyway.info().current().getVersion().getVersion());
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                        "WHERE table_schema = DATABASE() AND table_name = 'run_events' AND column_name = 'event_key'",
+                Integer.class
+        ));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.statistics " +
+                        "WHERE table_schema = DATABASE() AND table_name = 'run_events' " +
+                        "AND index_name = 'uk_run_events_attempt_event_key'",
+                Integer.class
+        ));
     }
 
     @Test
