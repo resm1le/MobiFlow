@@ -295,7 +295,9 @@ class ToolFacadeServiceTest {
         event.setMessage("waypoint_segment:0:COMPLETE");
         event.setPayloadJson("{\"step_id\":\"logged_in\"}");
         event.setTs(1_500);
-        when(waypointTimelineService.record(any(), any(), any())).thenReturn(List.of(event));
+        when(waypointTimelineService.recordForAttempt(any(), any(), any(), any()))
+                .thenReturn(new WaypointTimelineService.WaypointTimelineRecord(
+                        "target-1", "attempt-1", List.of(event)));
         Map<String, Object> arguments = Map.of(
                 "runTargetId", "target-1",
                 "attemptId", "attempt-1",
@@ -320,7 +322,7 @@ class ToolFacadeServiceTest {
         assertEquals("completed", replay.status());
         assertEquals("target-1", ((Map<?, ?>) replay.result()).get("runTargetId"));
         assertEquals("attempt-1", ((Map<?, ?>) replay.result()).get("attemptId"));
-        verify(waypointTimelineService, times(1)).record(any(), any(), any());
+        verify(waypointTimelineService, times(1)).recordForAttempt(any(), any(), any(), any());
     }
 
     @Test

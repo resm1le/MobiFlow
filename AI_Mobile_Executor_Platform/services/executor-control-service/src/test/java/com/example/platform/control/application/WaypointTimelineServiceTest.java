@@ -10,6 +10,7 @@ import com.example.platform.control.infrastructure.mapper.RunEventMapper;
 import com.example.platform.control.infrastructure.mapper.TaskAttemptMapper;
 import com.example.platform.control.infrastructure.mapper.TaskMapper;
 import com.example.platform.control.application.WaypointTimelineService.WaypointSegmentInput;
+import com.example.platform.control.application.WaypointTimelineService.WaypointTimelineRecord;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,6 +120,51 @@ class WaypointTimelineServiceTest {
         assertEquals(BEHAVIOR_LABEL, payload.get("behavior_label"));
         assertEquals(DEVICE_ID, payload.get("deviceId"));
         assertNotNull(first.getMessage());
+    }
+
+    @Test
+    void executorEntryDerivesRunTargetFromAttemptTaskLineage() throws IOException {
+        WaypointTimelineRecord record = service.recordForAttempt(
+                ATTEMPT_ID,
+                DEVICE_ID,
+                null,
+                fixtureSegments()
+        );
+
+        assertEquals(RUN_TARGET_ID, record.runTargetId());
+        assertEquals(ATTEMPT_ID, record.attemptId());
+        assertEquals(2, record.events().size());
+        verify(targetMapper).findById(RUN_TARGET_ID);
+    }
+
+    @Test
+    void executorEntryRejectsWrongDeviceAndMcpEntryRejectsWrongTarget() {
+        assertInvalid(() -> service.recordForAttempt(
+                ATTEMPT_ID,
+                "other-device",
+                null,
+                fixtureSegmentsUnchecked()
+        ));
+        assertInvalid(() -> service.recordForAttempt(
+                ATTEMPT_ID,
+                DEVICE_ID,
+                "other-target",
+                fixtureSegmentsUnchecked()
+        ));
+    }
+
+    @Test
+    void executorEntryRejectsTaskWithoutRunTargetBeforeTargetLookup() {
+        task.setRunTargetId(null);
+
+        assertInvalid(() -> service.recordForAttempt(
+                ATTEMPT_ID,
+                DEVICE_ID,
+                null,
+                fixtureSegmentsUnchecked()
+        ));
+
+        verify(targetMapper, never()).findById(RUN_TARGET_ID);
     }
 
     @Test

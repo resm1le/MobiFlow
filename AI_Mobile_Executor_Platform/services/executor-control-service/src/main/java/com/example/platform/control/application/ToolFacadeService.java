@@ -465,12 +465,15 @@ public class ToolFacadeService {
                 args -> {
                     String runTargetId = requireNonBlank(args.runTargetId(), ControlErrorCode.TOOL_ARGUMENT_INVALID);
                     String attemptId = requireNonBlank(args.attemptId(), ControlErrorCode.TOOL_ARGUMENT_INVALID);
-                    List<RunEventEntity> recorded = waypointTimelineService.record(
-                            runTargetId, attemptId, parseWaypointSegments(args.waypointSegments()));
-                    return result(new WaypointTimelineRecordResult(
-                            runTargetId,
+                    WaypointTimelineService.WaypointTimelineRecord record = waypointTimelineService.recordForAttempt(
                             attemptId,
-                            recorded.stream().map(this::toRunEventResponse).toList()
+                            null,
+                            runTargetId,
+                            parseWaypointSegments(args.waypointSegments()));
+                    return result(new WaypointTimelineRecordResult(
+                            record.runTargetId(),
+                            record.attemptId(),
+                            record.events().stream().map(this::toRunEventResponse).toList()
                     ));
                 }
         ));

@@ -80,6 +80,14 @@ public class WaypointTimelineService {
                                        String attemptId,
                                        List<WaypointSegmentInput> waypointSegments) {
         requireNonBlank(runTargetId);
+        return recordForAttempt(attemptId, null, runTargetId, waypointSegments).events();
+    }
+
+    @Transactional
+    public WaypointTimelineRecord recordForAttempt(String attemptId,
+                                                    String expectedDeviceId,
+                                                    String expectedRunTargetId,
+                                                    List<WaypointSegmentInput> waypointSegments) {
         requireNonBlank(attemptId);
         if (waypointSegments == null || waypointSegments.isEmpty() || waypointSegments.size() > MAX_SEGMENTS) {
             throw invalid();
@@ -92,9 +100,17 @@ public class WaypointTimelineService {
         if (!TERMINAL_ATTEMPT_STATUSES.contains(attempt.getStatus())) {
             throw invalid();
         }
+        if (expectedDeviceId != null && !Objects.equals(expectedDeviceId, attempt.getDeviceId())) {
+            throw invalid();
+        }
 
         TaskEntity task = taskMapper.findById(attempt.getTaskId());
         if (task == null) {
+            throw invalid();
+        }
+        String runTargetId = task.getRunTargetId();
+        if (isBlank(runTargetId)
+                || (expectedRunTargetId != null && !Objects.equals(expectedRunTargetId, runTargetId))) {
             throw invalid();
         }
         ExperimentRunTargetEntity target = targetMapper.findById(runTargetId);
@@ -146,7 +162,11 @@ public class WaypointTimelineService {
             }
             persisted.add(persistedEvent);
         }
-        return List.copyOf(persisted);
+        return new WaypointTimelineRecord(
+                runTargetId,
+                attemptId,
+                List.copyOf(persisted)
+        );
     }
 
     private void validateLineage(String runTargetId,
@@ -376,6 +396,13 @@ public class WaypointTimelineService {
                                     Long dwellMs) {
             this(stepId, behaviorLabel, enteredAtMs, arrivedAtMs, dwellMs, null, null);
         }
+    }
+
+    public record WaypointTimelineRecord(
+            String runTargetId,
+            String attemptId,
+            List<RunEventEntity> events
+    ) {
     }
 
     private record ResolvedSequence(String sequenceId, String behaviorLabel, List<String> waypointIds) {
