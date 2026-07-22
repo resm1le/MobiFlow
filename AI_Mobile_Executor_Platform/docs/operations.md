@@ -48,3 +48,17 @@ docker compose -f services/executor-control-service/docker-compose.local.yml up 
 - 控制面行为变更：同步更新 [control-plane.md](./control-plane.md)
 - Agent 接入语义变更：同步更新 [agent-tool-server.md](./agent-tool-server.md)
 - 验证路径变更：同步更新 [../integration/validation.md](../integration/validation.md)
+
+## Mock Executor 发布门
+
+P2-3c 控制面回归不要求真机。签名 mock Executor 使用与 Android Executor 相同的 `/executor/**` register/claim/start/events/finish/waypoint 协议，验证审批、pinned dispatch、attempt ownership、nonce、重放和 MySQL lineage。
+
+```powershell
+$env:P2_3C_DEVICE_TOKENS_JSON = '{"dev-7":"<token-7>","dev-9":"<token-9>"}'
+python .\integration\scripts\run-p2-3c-mock-e2e.py
+python .\integration\scripts\run-p2-3c-mock-e2e.py --approve
+```
+
+第一条命令必须停在 `approval_required`，第二条命令才允许创建模拟 run。输出中的 `SIMULATED EXECUTOR - NO DEVICE UI EXECUTED` 是强制边界声明。
+
+发布前还必须让 `ControlMapperIntegrationTest,MockExecutorRunIntegrationTest` 在可用 Docker daemon 上实际运行。`disabledWithoutDocker` 导致的 skip 只说明测试环境缺失，不能作为发布门通过。真实 App/profile 的页面到达与动作效果继续在独立真机阶段验收。

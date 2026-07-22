@@ -211,4 +211,13 @@ Mock Executor 只验证 Agent 治理、Platform 调度/lineage 和 Executor 协�
 
 4. 验收输出必须同时包含 run terminal 状态和两次 `SIMULATED EXECUTOR - NO DEVICE UI EXECUTED` 提示；脚本会断言 pinned sequence、attempt ownership 和每个 attempt 的 waypoint event 数量。
 
+5. 运行 MySQL/Redis Testcontainers 发布门，并确认报告中的 skipped 为 0：
+
+   ```powershell
+   cd services\executor-control-service
+   mvn -Dtest=ControlMapperIntegrationTest,MockExecutorRunIntegrationTest test
+   ```
+
+   Docker daemon 不可用时测试会安全跳过；这种结果不能记作发布验证通过。
+
 真实设备验证仍按上一节单独进行；本 smoke 通过不代表 WeChat UI 行为已经实现或验证。

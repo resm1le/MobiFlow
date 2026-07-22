@@ -18,11 +18,20 @@ The main endpoints are:
 - `POST /executor/tasks/{attemptId}/start`
 - `POST /executor/tasks/{attemptId}/events`
 - `POST /executor/tasks/{attemptId}/finish`
+- `POST /executor/tasks/{attemptId}/waypoint-segments`
 - `POST /executor/tasks/{attemptId}/artifacts/uploads`
 - `POST /executor/tasks/{attemptId}/artifacts/uploads/{artifactId}/finalize`
 
 Executors claim work from the control plane, execute task attempts, stream
 events, and upload artifacts through the artifact ticket flow.
+
+Waypoint evidence is Executor-owned production evidence. It is published only
+after the attempt reaches a terminal state. The request body contains only
+`waypointSegments`; every segment permits exactly
+`step_id/behavior_label/entered_at_ms/arrived_at_ms/dwell_ms`. Identity fields
+such as `deviceId`, `sequenceId`, `runTargetId`, `taskId`, and `runId` are not
+accepted. Platform authenticates the Executor, verifies attempt ownership, and
+derives target/device/sequence through `attempt -> task -> run target`.
 
 ## Admin And Operator API
 
@@ -139,9 +148,12 @@ The same operation is available to operators as `POST /api/runs/heterogeneous`.
 
 ### Waypoint Evidence
 
-`record_waypoint_segments` writes terminal-attempt evidence without driving a
-device action. It is audited, replay-safe, annotated idempotent, and does not
-require approval. Input segments use the Agent fields
+The production endpoint
+`POST /executor/tasks/{attemptId}/waypoint-segments` writes terminal-attempt
+evidence from the same signed Executor identity that owns the attempt. The MCP
+tool `record_waypoint_segments` remains an audited compatibility/diagnostic
+entry and shares the same canonical validation service. Neither entry drives a
+device action or requires approval. Input segments use
 `step_id/behavior_label/entered_at_ms/arrived_at_ms/dwell_ms`; callers cannot
 provide device or sequence identity. Platform derives those values through the
 trusted `attempt -> task -> run target` relationship.
@@ -151,6 +163,10 @@ three timestamps, `INTERRUPTED` has entered time only, and `INCOMPLETE` has no
 timestamps. Interrupted and incomplete segments are not complete pcap windows.
 The `(attempt_id,event_key)` key makes equal replays a no-op and rejects changed
 payloads. Retries keep independent evidence on their own attempt.
+
+Agent `TaskGraph` sessions do not carry Platform `runTargetId` or `attemptId`.
+Agent sequence traces remain simulation/diagnostic evidence; production attempt
+events originate at Executor ingress and Platform remains the lineage authority.
 
 ## Compatibility Tool Runtime
 
@@ -168,7 +184,7 @@ To roll the Agent back to this path, configure:
 
 ```text
 PLATFORM_ADAPTER_KIND=http
-PLATFORM_TOOL_BASE_URL=http://<control-service>/tools
+PLATFORM_TOOL_BASE_URL=http://<control-service>
 ```
 
 During the migration, the MCP facade reuses `/tools/**` service logic instead of

@@ -35,11 +35,11 @@ MobiFlow 是流量采集研究的「移动端行为生成与调度引擎」:用 
 
 | 层 | 本轮职责 | 复用/扩展的地基 |
 |---|---|---|
-| **Agent(Python)** | 航点序列的语义定义、编译、AI 铺路决策、失败判定 | `TaskGraphRuntime` 闭环、`VerificationSpec`、intake 流水线、`ExecutionTraceExporter` |
-| **Platform(Java)** | 设备注册/寻址、异构分派、租约并发、批次聚合、证据落库 | `ExperimentRun/Target`、`claim/renewLease/LeaseReaper`、MCP `ToolFacadeService` |
-| **执行器(Kotlin)** | 真机执行,本轮不碰 | 仅认 Platform 下发的 `taskPayloadJson` 契约 |
+| **Agent(Python)** | 意图解析、版本化航点序列解析、确定性 dispatch 编译、governed proposal | `SequenceCatalog`、`CollectionDispatchService`、Platform adapter；`TaskGraphRuntime` 保留为决策/仿真资产 |
+| **Platform(Java)** | 审批、设备注册/寻址、异构分派、租约并发、run/target/task/attempt lineage、状态聚合和证据落库 | `ExperimentRun/Target`、`claim/renewLease/LeaseReaper`、MCP `ToolFacadeService`、`WaypointTimelineService` |
+| **执行器(Kotlin / mock)** | claim 后执行 attempt，回传 event/artifact/finish/航点证据；真机 UI 实现后置独立验收 | `/executor/**` 签名协议与 task `waypoint_sequence` |
 
-分层依据:航点"用什么方式走"是核心价值(可比样本)的判断逻辑,属 Agent;"多设备并发不抢占"是规模保障,属 Platform 已验证的租约地基,扩展不重造。真机是执行器责任边界,不阻塞 Agent/Platform 开发。
+分层依据:Agent 负责把用户意图变成受治理的正式 sequence dispatch；Platform 是执行身份与 lineage 的唯一权威；设备侧实际路径、到达判定及证据采样发生在 Executor attempt 中。不得把 `runTargetId/attemptId` 注入 Agent `TaskSession/TaskGraph` 来伪装生产执行。真机是执行器责任边界,不阻塞 Agent/Platform 控制面开发。
 
 ---
 
@@ -154,14 +154,15 @@ DispatchEntry:
 
 目标产物:每航点段一条记录 `{waypoint_id, behavior_label, deviceId, entered_at, arrived_at, verdict, path_action_count}`,供事后按 `deviceId` + 时间窗与第三方 pcap 对齐。
 
-**分层修正(Review 核实的 P0,原草案"扩展 _build_timeline"表述错误)**:
+**分层修正(按生产执行边界定稿)**:
 - `ExecutionTraceExporter._build_timeline`(`trace_export.py:161`)是**节点/状态级**,数据源为 `role_results`/`status_history`,**本身无 waypoint 边界、无 deviceId、无 behavior_label**。
 - 更关键:**`deviceId` 是 Platform 侧 `target.deviceId` 概念,Agent 执行逻辑层根本不持有它**。让 Agent exporter 凭空透出 deviceId 属于把 Platform 数据错放到 Agent 层。
-- **正确切分(已定稿:方案 A,deviceId 由 Platform 侧管理)**:
-  - **Agent 层**产出**设备无关的航点段时间线**(`waypoint_id` + `behavior_label` + 进入/到达时间戳 + verdict + 动作计数)——这些是 Agent 自己拥有的执行事实,**不含 deviceId**。
-  - **`deviceId` 由 Platform 层统一管理并 join**:Platform 在两端都掌握 deviceId(下发时分配、回报时落库),落库航点时间线时把 target.deviceId 与 Agent 上报的段时间线 join。Agent 保持设备无关,不被塞入设备身份。
-  - (下发方向的"点名指定设备"是另一回事,见 §3 `select.device_ids`,不受此影响——deviceId 标签始终由 Platform 负责,Agent 两端都不碰。)
-- 脱敏与导出沿用 `ExecutionTraceExporter` 现有能力;Platform 侧 `RunEvent`/artifact 落库最终航点时间线作为证据。
+- **生产切分**:
+  - Agent 只把正式 `waypoint_sequence` 编译进 per-target task payload；Agent 仿真产生的 `ExecutionTraceExporter.waypoint_segments` 仅作决策/诊断证据，不冒充设备事实。
+  - Executor 在 claim 得到 attempt 身份后执行 task，finish 为 terminal 后调用 `POST /executor/tasks/{attemptId}/waypoint-segments`，body 只含五个设备无关字段。
+  - Platform 从认证设备与 `attempt → task → run target` 派生 `deviceId/runTargetId/sequenceId`，校验完整序列并以 attempt 级 `WAYPOINT_SEGMENT` 事件落库。
+  - MCP `record_waypoint_segments` 作为兼容/诊断入口保留，但与 Executor endpoint 共用 canonical service；显式 target 只作 expected lineage 校验。
+- 下发方向的点名设备仍使用 §3 `select.device_ids`，不等于让 Agent 持有运行时 attempt identity。
 
 > 与支柱四关系:此产物即支柱四"细粒度动作-流量对齐"的粗粒度落点——航点边界即流量标注边界。更细粒度(航点内动作级)留待支柱四推进。
 
@@ -171,8 +172,9 @@ DispatchEntry:
 
 - **异构分派(Platform,JUnit)**:仿真设备池,断言"3×X + 2×Y"生成 5 个 target 且 `sequenceId`/`taskPayloadJson` 各异;并发 claim 无重复抢占(复用现有租约测试)。
 - **航点铺路 + 失败判定(Agent,仿真适配器)**:用 `platform/simulation/adapter.py` + `fake` adapter,构造假障碍事实序列 → 断言救活;构造仅越界可达 → 断言判 `off_standard_path` 失败。
-- **端到端**:复用 intake 的 simulation suite runner,跑一条含 `strict` 航点的序列,校验 timeline 完整 + `distinct-session-id` 不变量。
-- 真机不阻塞,执行器仅契约冒烟。
+- **Agent 仿真**:复用 intake 的 simulation suite runner,跑一条含 `strict` 航点的序列,校验 diagnostic timeline 完整 + `distinct-session-id` 不变量。
+- **控制面端到端**:signed mock Executor 通过真实 register→claim→start→finish→waypoint 协议验证审批、pinned dispatch、lineage、重放和 retry attempt 隔离；成功只表示 `simulated_executor` 协议场景成功。
+- 真机不阻塞；Android profile/真实页面到达映射在控制面完成后单独验收。
 
 ---
 

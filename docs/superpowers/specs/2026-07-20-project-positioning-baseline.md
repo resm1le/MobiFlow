@@ -34,6 +34,8 @@
 - **真机执行** 是执行器(`AutoA11y_Executor`)的责任边界。执行器与 Platform 之间是**数据传输 / 接口契约**关系。
   - **推论**:Agent 层与 Platform 层的开发**在仿真适配器上进行即可**,只要接口契约定清楚,能力自然落到真机。"真机能否跑"是执行器的独立工作项,**不计入 Agent/Platform 的缺口或待办**,不应作为横切关注点反复纠结。
   - 负责人此前已验证真机链路可行;当前阶段刻意先在仿真上做设计。
+- **生产生命周期分工** 已定稿:Agent 负责意图/计划/正式 sequence 解析与 governed proposal；Platform 负责审批、调度、run/target/task/attempt lineage、状态与证据；Executor 负责 claim 后的 attempt 执行及 event/artifact/finish/航点证据回传。Platform attempt 不进入 Agent TaskGraph。
+- **Mock Executor** 可以完整替代真机来验证上述控制面协议,包括 HMAC、nonce、pinned claim、重试和证据落库；它不运行 UI,因此通过 mock 不等于真实 App 行为已通过。
 
 ---
 
@@ -48,7 +50,7 @@
 
 ### 关于 Agent 与真机操作的关系(校正旧认知)
 
-当前 App 内的实际 UI 操作(tap/swipe/输入)由**设备端 profile 插件**执行;Agent 经 MCP 做的是创建/取消 run、发运维指令、观测状态、提治理提案。**这不是缺口,而是分层**——按第三节边界,Agent/Platform 通过接口与执行器交互,不直接碰真机 UI。用 AI 增强可靠性,是在这个接口契约之上增强决策与恢复能力,而非让 Agent 去逐像素操控真机。
+当前 App 内的实际 UI 操作(tap/swipe/输入)由**设备端 profile 插件**执行;Agent 经 MCP 做的是创建/取消 run、发运维指令、观测状态、提治理提案。Executor 只与 Platform 的 `/executor/**` 通信并从 claim payload 取得完整任务与 attempt 身份；它不从 Agent 取得运行时 lineage。**这不是缺口,而是分层**——按第三节边界,Agent/Platform 通过接口与执行器交互,不直接碰真机 UI。用 AI 增强可靠性,是在这个接口契约之上增强决策与恢复能力,而非让 Agent 去逐像素操控真机。
 
 ---
 

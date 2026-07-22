@@ -155,6 +155,10 @@ submitted = service.submit_intent(intent, caller_context)
 
 `submitted.status == CollectionDispatchStatus.APPROVAL_REQUIRED` is an expected governance state—not a failure and not evidence that a run exists. The caller must display the returned confirmation details and pass the user's explicit decision to the existing Platform adapter `resolve_approval(...)` method. The collection service does not auto-approve confirmations. Device availability and tag-capacity warnings describe a discovery snapshot only; Platform validates and reserves devices authoritatively after approval.
 
+Production task execution starts only after a device Executor claims the Platform task. The Agent does not receive or store Platform `runTargetId`/`attemptId` in `TaskSession` or drive the attempt lifecycle. Platform owns approval, scheduling, lineage, aggregate state, and evidence persistence; the authenticated Executor owns start/events/finish and waypoint evidence publication. `ExecutionTraceExporter` waypoint data remains simulation/diagnostic evidence and must not be presented as real-device evidence.
+
+The repository's signed mock Executor can validate this control-plane contract without a device. It reads all task and attempt identity from claim responses and clearly reports `SIMULATED EXECUTOR - NO DEVICE UI EXECUTED`; it does not validate Android profiles or real App behavior.
+
 ## Scenario Regression Suite
 
 ```python
@@ -201,5 +205,6 @@ python -m pytest -q
 
 - No distributed worker, queue, or daemon in this subproject.
 - No real-device ADB loop in the Agent tests.
+- No Platform attempt lifecycle inside the Agent TaskGraph; production attempts belong to Platform and Executor.
 - No direct model-to-tool execution. Model output must become structured decisions or proposals and pass system validation.
 - No claim of a general-purpose phone-control Agent. This is an execution-oriented Agent runtime prototype for bounded mobile experiment workflows.
