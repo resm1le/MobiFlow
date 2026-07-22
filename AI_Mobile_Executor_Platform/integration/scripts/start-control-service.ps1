@@ -24,18 +24,22 @@ if ($DeviceId -or $DeviceToken) {
 
 if ($DeviceTokensJson) {
     try {
-        $deviceTokens = $DeviceTokensJson | ConvertFrom-Json -AsHashtable
+        $deviceTokens = $DeviceTokensJson | ConvertFrom-Json
     }
     catch {
         throw "DeviceTokensJson must be a JSON object mapping device IDs to non-blank tokens."
     }
-    if (-not $deviceTokens -or $deviceTokens.Count -eq 0) {
+    if (-not ($deviceTokens -is [PSCustomObject])) {
+        throw "DeviceTokensJson must be a JSON object mapping device IDs to non-blank tokens."
+    }
+    $deviceTokenEntries = @($deviceTokens.PSObject.Properties)
+    if ($deviceTokenEntries.Count -eq 0) {
         throw "DeviceTokensJson must contain at least one device token."
     }
-    foreach ($entry in $deviceTokens.GetEnumerator()) {
-        $configuredDeviceId = [string]$entry.Key
+    foreach ($entry in $deviceTokenEntries) {
+        $configuredDeviceId = [string]$entry.Name
         $configuredToken = [string]$entry.Value
-        if ([string]::IsNullOrWhiteSpace($configuredDeviceId) -or [string]::IsNullOrWhiteSpace($configuredToken)) {
+        if (-not ($entry.Value -is [string]) -or [string]::IsNullOrWhiteSpace($configuredDeviceId) -or [string]::IsNullOrWhiteSpace($configuredToken)) {
             throw "DeviceTokensJson device IDs and tokens must be non-blank strings."
         }
         if ($DeviceId -and $configuredDeviceId -eq $DeviceId) {
