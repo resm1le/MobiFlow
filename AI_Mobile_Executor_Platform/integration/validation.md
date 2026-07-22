@@ -183,3 +183,32 @@ Authorization: Bearer <admin-token>
 5. 从 `../AutoA11y_Executor` 启动 Android 执行端
 6. 完成一次 pool-based run 或 single-device run
 7. 确认 artifact upload / finalize 全链路成功
+
+## 9. P2-3c Mock Executor 闭环（无需真机）
+
+Mock Executor 只验证 Agent 治理、Platform 调度/lineage 和 Executor 协议；它不运行 ADB、Android profile 或任何设备 UI，不能替代最终真机效果验收。
+
+1. 为两个 mock identity 配置独立 HMAC token（脚本不会打印 token）：
+
+   ```powershell
+   $env:P2_3C_DEVICE_TOKENS_JSON = '{"dev-7":"<token-7>","dev-9":"<token-9>"}'
+   $env:PLATFORM_TOOL_BASE_URL = 'http://127.0.0.1:8080'
+   $env:PLATFORM_TOOL_BEARER_TOKEN = '<admin-token>'
+   .\integration\scripts\start-control-service.ps1 -AdminAuthToken $env:PLATFORM_TOOL_BEARER_TOKEN
+   ```
+
+2. 先运行无批准 smoke；它注册 mock、完成 discovery/proposal，并停在 `approval_required`，不会创建 run：
+
+   ```powershell
+   python .\integration\scripts\run-p2-3c-mock-e2e.py
+   ```
+
+3. 明确允许创建和执行模拟 run 后，追加 `--approve`：
+
+   ```powershell
+   python .\integration\scripts\run-p2-3c-mock-e2e.py --approve
+   ```
+
+4. 验收输出必须同时包含 run terminal 状态和两次 `SIMULATED EXECUTOR - NO DEVICE UI EXECUTED` 提示；脚本会断言 pinned sequence、attempt ownership 和每个 attempt 的 waypoint event 数量。
+
+真实设备验证仍按上一节单独进行；本 smoke 通过不代表 WeChat UI 行为已经实现或验证。

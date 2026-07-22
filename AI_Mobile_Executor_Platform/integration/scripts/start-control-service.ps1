@@ -2,6 +2,7 @@ param(
     [string]$SpringProfile = "local-docker",
     [string]$DeviceId = $env:PLATFORM_CONTROL_DEVICE_ID,
     [string]$DeviceToken = $env:PLATFORM_CONTROL_DEVICE_TOKEN,
+    [string]$DeviceTokensJson = $env:P2_3C_DEVICE_TOKENS_JSON,
     [string]$AdminAuthToken = $env:PLATFORM_CONTROL_ADMIN_AUTH_TOKEN,
     [string]$MinioEndpoint = $env:MINIO_ENDPOINT,
     [switch]$AllowUnsignedDevices
@@ -19,6 +20,29 @@ if ($DeviceId -or $DeviceToken) {
         throw "DeviceId and DeviceToken must be provided together."
     }
     $jvmArgs += "-Dplatform.control.auth.device-tokens[$DeviceId]=$DeviceToken"
+}
+
+if ($DeviceTokensJson) {
+    try {
+        $deviceTokens = $DeviceTokensJson | ConvertFrom-Json -AsHashtable
+    }
+    catch {
+        throw "DeviceTokensJson must be a JSON object mapping device IDs to non-blank tokens."
+    }
+    if (-not $deviceTokens -or $deviceTokens.Count -eq 0) {
+        throw "DeviceTokensJson must contain at least one device token."
+    }
+    foreach ($entry in $deviceTokens.GetEnumerator()) {
+        $configuredDeviceId = [string]$entry.Key
+        $configuredToken = [string]$entry.Value
+        if ([string]::IsNullOrWhiteSpace($configuredDeviceId) -or [string]::IsNullOrWhiteSpace($configuredToken)) {
+            throw "DeviceTokensJson device IDs and tokens must be non-blank strings."
+        }
+        if ($DeviceId -and $configuredDeviceId -eq $DeviceId) {
+            throw "Device $configuredDeviceId is configured by both DeviceId/DeviceToken and DeviceTokensJson."
+        }
+        $jvmArgs += "-Dplatform.control.auth.device-tokens[$configuredDeviceId]=$configuredToken"
+    }
 }
 
 if ($AdminAuthToken) {

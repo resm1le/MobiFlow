@@ -1,0 +1,20 @@
+{
+  "name": "P2-3c simulated Executor control-plane smoke",
+  "description": "Governed heterogeneous dispatch executed by signed protocol mocks; no device UI is executed.",
+  "devices": [
+    {
+      "deviceId": "dev-7",
+      "profiles": ["com.tencent.mm"],
+      "tags": ["android13", "simulated_executor"],
+      "sequenceId": "wechat.text_chat.v1",
+      "outcome": "SUCCESS"
+    },
+    {
+      "deviceId": "dev-9",
+      "profiles": ["com.tencent.mm"],
+      "tags": ["android13", "simulated_executor"],
+      "sequenceId": "wechat.video_call.v1",
+      "outcome": "SUCCESS"
+    }
+  ]
+}
