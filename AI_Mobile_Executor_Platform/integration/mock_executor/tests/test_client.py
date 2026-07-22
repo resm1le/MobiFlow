@@ -123,7 +123,7 @@ class MockExecutorClientTest(unittest.TestCase):
         bodies = [json.loads(request[3]) for request in transport.requests]
         self.assertEqual("attempt-1", bodies[0]["attemptId"])
         self.assertEqual("dev-7", bodies[1]["events"][0]["deviceId"])
-        self.assertEqual("SUCCEEDED", bodies[2]["status"])
+        self.assertEqual("SUCCESS", bodies[2]["status"])
         self.assertEqual({"waypointSegments": bodies[3]["waypointSegments"]}, bodies[3])
         self.assertNotIn("runTargetId", bodies[3])
         self.assertNotIn("deviceId", bodies[3]["waypointSegments"][0])

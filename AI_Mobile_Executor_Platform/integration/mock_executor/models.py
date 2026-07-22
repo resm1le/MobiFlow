@@ -8,7 +8,7 @@ from typing import Any
 
 
 class MockAttemptOutcome(str, Enum):
-    SUCCESS = "SUCCEEDED"
+    SUCCESS = "SUCCESS"
     FAILURE = "FAILED"
     FAIL_THEN_SUCCEED = "FAIL_THEN_SUCCEED"
 
