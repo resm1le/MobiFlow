@@ -1,11 +1,14 @@
 package com.example.platform.control.api;
 
 import com.example.platform.control.application.ArtifactUploadMode;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Map;
@@ -148,6 +151,35 @@ public final class ExecutorApiModels {
             String code,
             @NotBlank String message,
             long ts
+    ) {
+    }
+
+    public record ExecutorWaypointSegmentsRequest(
+            @NotEmpty @Size(max = 256) @Valid List<ExecutorWaypointSegment> waypointSegments
+    ) {
+        @JsonAnySetter
+        public void rejectUnknownField(String name, Object value) {
+            throw new IllegalArgumentException("Unknown executor waypoint request field: " + name);
+        }
+    }
+
+    public record ExecutorWaypointSegment(
+            @JsonProperty("step_id") @NotBlank String stepId,
+            @JsonProperty("behavior_label") @NotBlank String behaviorLabel,
+            @JsonProperty("entered_at_ms") Long enteredAtMs,
+            @JsonProperty("arrived_at_ms") Long arrivedAtMs,
+            @JsonProperty("dwell_ms") Long dwellMs
+    ) {
+        @JsonAnySetter
+        public void rejectUnknownField(String name, Object value) {
+            throw new IllegalArgumentException("Unknown executor waypoint segment field: " + name);
+        }
+    }
+
+    public record ExecutorWaypointSegmentsResponse(
+            String runTargetId,
+            String attemptId,
+            int recordedCount
     ) {
     }
 

@@ -1,0 +1,11 @@
+{
+  "waypointSegments": [
+    {
+      "step_id": "logged_in",
+      "behavior_label": "wechat_text_chat",
+      "entered_at_ms": 1780000000100,
+      "arrived_at_ms": 1780000000500,
+      "dwell_ms": 400
+    }
+  ]
+}
